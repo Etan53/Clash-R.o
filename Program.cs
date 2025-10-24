@@ -1,0 +1,2295 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+class Program
+{
+    static int elixir = 5;
+    static int maxElixir = 10;
+    static float regenRate = 2f;
+    static DateTime lastRegen = DateTime.Now;
+    static int turnCount = 0;
+    static int aiElixir = 5;
+    static DateTime lastAIRegen = DateTime.Now;
+    static int difficultyLevel = 1; // 1 = Easy, 2 = Medium, 3 = Hard
+
+    static List<Card> enemyDeck = new List<Card>();
+    static List<Unit> playerUnits = new List<Unit>();
+    static List<Unit> enemyUnits = new List<Unit>();
+
+    static Tower playerTower = new Tower("Player Tower", 1000);
+    static Tower enemyTower = new Tower("Enemy Tower", 1000);
+
+    static List<Card> playerDeck = new List<Card>();
+
+
+
+
+    class Unit
+    {
+        public string Name { get; }
+        public int Health { get; set; }
+        public int MaxHealth { get; }
+        public int Attack { get; }
+        public string Symbol { get; }
+        public string Lane { get; set; }
+        public int Position { get; set; }
+        public int Range { get; }
+        public bool IsSplash { get; }
+        public int Speed { get; }
+
+        public Unit(string name, int health, int attack, string symbol, int range, bool isSplash, int speed)
+        {
+            Name = name;
+            Health = health;
+            MaxHealth = health;
+            Attack = attack;
+            Symbol = symbol;
+            Range = range;
+            IsSplash = isSplash;
+            Speed = speed;
+            Lane = "left";
+            Position = 0;
+        }
+
+        public Unit Clone()
+        {
+            return new Unit(Name, MaxHealth, Attack, Symbol, Range, IsSplash, Speed);
+        }
+    }
+
+    class Card
+    {
+        public string Name { get; }
+        public int ElixirCost { get; }
+        public Unit Unit { get; }
+
+        public Card(string name, int cost, Unit unit)
+        {
+            Name = name;
+            ElixirCost = cost;
+            Unit = unit;
+        }
+    }
+
+    class Tower
+    {
+        public string Name { get; }
+        public int Health { get; set; }
+        private int cooldown = 0;
+        public int AttackPower { get; } = 25;
+
+        public Tower(string name, int health)
+        {
+            Name = name;
+            Health = health;
+        }
+
+        public void Attack(List<Unit> units, string lane)
+        {
+            if (cooldown > 0)
+            {
+                cooldown--;
+                return;
+            }
+
+            var target = units.Find(u => u.Lane == lane && u.Position >= 8);
+            if (target != null)
+            {
+                Console.WriteLine($"\n🏰 {Name} locks onto {target.Name}!");
+                Thread.Sleep(300);
+                Console.Write("🏹 ");
+                for (int i = 0; i < 5; i++)
+                {
+                    Console.Write("➤");
+                    Thread.Sleep(100);
+                }
+                Console.WriteLine($" 💥 {target.Name} takes {AttackPower} damage!");
+                target.Health -= AttackPower;
+                cooldown = 2;
+            }
+        }
+    }
+    static void Main()
+    {
+        Console.WriteLine("⚔️ Clash Console Royale");
+        ShowMainMenu();
+
+    }
+    static void RunGameLoop()
+    {
+        Console.Clear();
+        Console.WriteLine("Commands: '[cardname]', 'wait', 'battle', 'exit'");
+
+        while (true)
+        {
+            RegenerateElixir();
+            Console.WriteLine($"\nElixir: {elixir}");
+            ShowAvailableCards();
+
+            Console.Write("Command: ");
+            string input = Console.ReadLine().ToLower();
+            
+           
+            if (input == "exit") break;
+            else if (input == "wait")
+            {
+                Console.WriteLine("Waiting...");
+                Thread.Sleep(1000);
+                AdvanceEnemyUnitsOnWait();
+            }
+            else if (input == "battle")
+            {
+                SimulateBattle();
+            }
+            else
+            {
+                HandleDeployment(input);
+            }
+
+            ShowBattleLayout();
+
+            if (playerTower.Health <= 0 || enemyTower.Health <= 0)
+            {
+                Console.WriteLine("\n\nPress any key to continue...");
+                Console.ReadKey();
+
+                Console.WriteLine("\n📊 Match Summary:");
+                Console.WriteLine($"Turns played: {turnCount}");
+                Console.WriteLine($"Player units deployed: {playerUnits.Count}");
+                Console.WriteLine($"Enemy units deployed: {enemyUnits.Count}");
+                Console.WriteLine($"Remaining Player Tower HP: {playerTower.Health}");
+                Console.WriteLine($"Remaining Enemy Tower HP: {enemyTower.Health}");
+
+                if (playerTower.Health <= 0 && enemyTower.Health <= 0)
+                    Console.WriteLine("⚔️ It's a draw!");
+                else if (playerTower.Health <= 0)
+                    Console.WriteLine("💀 You lost!");
+                else if (enemyTower.Health <= 0)
+                {
+                    Console.Clear();
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.WriteLine(@"
+                         ╔════════════════════════════════════════════════════════════╗
+                         ║                      ⚔️ EVO PEKKA VICTORY ⚔️              ║
+                         ╚════════════════════════════════════════════════════════════╝
+");
+                    Console.ResetColor();
+
+                    string[] loreLiness = new string[]
+                    {
+                    "“When the dust settles and the towers crumble, only one name echoes across the battlefield — Evo Pekka.”\n",
+                    "\nForged in the molten heart of the Arena Core, Evo Pekka is no ordinary warrior.",
+                    "He is the final evolution of brute force and tactical brilliance — a fusion of ancient steel and arcane fury.\n",
+                    "\nLegends say he was once a prototype Mini Pekka, discarded for being too unstable.",
+                    "But deep within the vaults of forgotten decks, he awakened.\n",
+                    "\nWith each clash, Evo Pekka absorbs the rage of fallen allies, his armor pulsing with violet energy.",
+                    "His blade? A seismic cleaver that doesn’t just strike — it shatters.\n",
+                    "\nIn the final match of the Grand Cycle, Evo Pekka stood alone against a swarm of elite units.",
+                    "With a single charge, he cleaved through spells, towers, and fate itself.",
+                    "The arena went silent. Then came the roar — not of the crowd, but of destiny fulfilled.\n",
+                    "\n“𝓥𝓲𝓬𝓽𝓸𝓻𝔂 𝓲𝓼 𝓷𝓸𝓽 𝓬𝓵𝓪𝓲𝓶𝓮𝓭. 𝓘𝓽 𝓲𝓼 𝓬𝓪𝓻𝓿𝓮𝓭 — 𝓸𝓷𝓮 𝓼𝔀𝓲𝓷𝓰 𝓪𝓽 𝓪 𝓽𝓲𝓶𝓮.”\n"
+                    };
+
+                    foreach (string line in loreLiness)
+                    {
+                        PrintSlow(line);
+                        Thread.Sleep(400);
+                    }
+
+                    Console.WriteLine("\n\nPress any key to continue...");
+                    Console.ReadKey();
+                }
+
+                break; // Exit game loop after match ends
+            }
+
+            turnCount++;
+        }
+
+        Console.WriteLine("Game over.");
+        Console.ReadLine();
+    }
+
+
+
+    static void ShowMainMenu()
+    {
+        while (true)
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("🎮 MAIN MENU");
+            Console.WriteLine("------------");
+            Console.WriteLine("1. Play Game");
+            Console.WriteLine("2. Hall of Legends");
+            Console.ResetColor();
+
+            Console.Write("\nChoose an option: ");
+            string choice = Console.ReadLine();
+            
+
+            switch (choice)
+            {
+                case "1":
+                    ResetGameState();   
+                    SetupDeck();
+                    RunGameLoop();
+                    break;
+
+                case "2":
+                    EnterHallOfLegends();
+                    break;
+
+                
+                default:
+                    Console.WriteLine("❌ Invalid choice. Press Enter to try again.");
+                    Console.ReadLine();
+                    break;
+            }
+        }
+    }
+
+    static void EnterHallOfLegends()
+    {
+        Console.Clear();
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine("🏛️ Entering the Hall of Legends...");
+        Thread.Sleep(1700);
+
+        // Wiggam
+        ScrollLoreIntro();
+        Console.Clear();
+        RevealWiggamLoreAnimated();
+        Console.Clear();
+        WiggamVsDoorCutscene();
+        Console.Clear();
+
+        //Super Mini Pekka
+        ShowHallOfLegends();
+        Console.Clear();
+
+        // Evo Pekka
+        RevealEvoPekkaLore();
+        Console.Clear();
+        EvoPekkaCutscene();
+        Console.Clear();
+
+        // Evo MegaKnight
+        RevealMegaKnightLore();
+        Console.Clear();
+        MegaKnightCutscene();
+        Console.Clear();
+
+        // Sparky
+        RevealSparkyLore();
+        Console.Clear();
+        SparkyCutscene();
+        Console.Clear();
+
+        // Golem
+        RevealGolemLore();
+        Console.Clear();
+        GolemCutscene();
+        Console.Clear();
+
+        // Berserker sequence
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.WriteLine(@"
+
+██████╗░███████╗██████╗░░██████╗███████╗██████╗░██╗░░██╗███████╗██████╗░
+██╔══██╗██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║░██╔╝██╔════╝██╔══██╗
+██████╦╝█████╗░░██████╔╝╚█████╗░█████╗░░██████╔╝█████═╝░█████╗░░██████╔╝
+██╔══██╗██╔══╝░░██╔══██╗░╚═══██╗██╔══╝░░██╔══██╗██╔═██╗░██╔══╝░░██╔══██╗
+██████╦╝███████╗██║░░██║██████╔╝███████╗██║░░██║██║░╚██╗███████╗██║░░██║
+╚═════╝░╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝╚═╝░░╚═╝╚═╝░░╚═╝╚══════╝╚═╝░░╚═╝
+
+                                             ░▒▓      ░▓█▓▒▒▒▒▒▒▒▒ ▒░░░░░ ▒▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ▒██▒░░░▒░▒░▒░   ░░████▓▓▒████▓▓░█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ██▒▒▒▓▓▓▓█▓█▓▒▒▒░░░░   ██▓████▓▒▒█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░██▒▒▓▒▒▒▒▒▒▒▓▓███▓▓▒▓▒▒▒  ▒█▓██▓▒▓█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▓█▒▒▓▓▓▓███▓▒▒▒▒▒▓▓███▓▓▓▒▒  ██▓▓░██▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒█▓▓▓▒▒▓▒▒▒▓██▓▒▒▒▒▒▓▓▓▒▓▓▓▓▒░ █▓▓░█▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒█▒▒▒▒▓▓▓▓▒▒▒▓▓▓█▓▒▒▒▓██▓▓▒▓▒▒░▓▒▓▓██▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒▓▒▒▒▒▒███▒▒▒ ░░▒█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ████████▓▒▒▒▓▓▓▓▓▒▒▒▒▒▒▒▒░▓█▓▒ █░▓█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓█▓████▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▓ █▒▓███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▓▓▓▒▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒▒▒▓█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▒▒▒▒▒▒▒▒▓▒▓▓▓▓▓▒░░░░░░░░░░  ░██░█▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓▓▓▓▓▓▒▓▒▒▓▓▓▒▓███████▓▓▒▒███▒▓█▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▓▒▓▒▒▒▓▓▒▒▒▒▒▒▒░░  ▒█████▓▒██▓░██▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▒▓▓▓▓▓█▓▓▒▒▒▒▒▓█▓▒░░▓░▒░███▓▓▒█████▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▒▓▓▓▓▓▓▓▓▓▓▓▒░░░▓██░░▓███▓▓█▓▒█▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ █▒▒▒▓▒░▒▒▒▓▓▓▓▓▓▓▒░░░█▒███████▒▓█▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█░▓██▓▓▓▓░░░▒▒▓█▓▓██▓████▓░░ ▓▒█▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ██░▓███▓░███▓▓▒▒▒▓▒▒░░░       ▓▓███▓█▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ░██▒▓▒▒▒▒░▒▓█▓▒▓▓▓▒▓█  ░▒▒█████▓▓██▓▓▓█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░███▒▓▓█▓▒▒▒▒▒▓▒▒▒▓▓▒██▒ ░░ ███▓▒█▓▓▓█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░████░▒▒▒▒░▓▒▒▒▓▓▒░▓█▓████    ██▓▓█▓█▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ █▓█░▒█▓▓▓░░▒▒▒▒░▓█▓░████░░███▓▒▓████▓██▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░       ░████░▓▓██▓█▓▒▓▓░█████▓░███ ██▓▒██▓▓▓▓██▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒░░  ████████████ ▓▓▒░░▒▓█▓░█████▓██▒██░██▓▓█▓███▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒░ ███████████████ █████▓▓▓▓ ██▓▓█████▓▓▓█▓▓▓▓▓▓▓▓▓▓▓░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒░░███████████████ ░▒▓▓▓▓█▒░░█▓▓▓▓▒█▓▒▒▓█▓▓▓▓░░░▒████░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒ ████████████████ ▓▒ ░░▒░░ ██▓▓▓█████████▒▒▓███▒░▒▒░           
+           ▒▒▒▒▒▒▒▒▒▒▒░ ████████████████▓██░▓█   ░██▓▒█████████████▒▓█████░░          
+           ▒▒▒▒▒▒▒▒▒▒▒░ ████████▓██████▓ ██████ ████▓██████████████████████░          
+           ▒▒▒▒▒▒▒▒▒▒▒ █████████▓██████▓░████░ ████▓███▓████████████░░░▒██▓           
+                       █████████▓██████  ░    █████████▓██████████████▓░░▒▓░          
+          ░███████████▒█████████▓█████   █   ▓░░▓█████▓█████▓███████░▓█████           
+          ░█████████▓▓██████████▓████░ ░░████░░░ ▓██████████████████▓▒▒░░░░░          
+           ░░▒▓▒▒▓▓▓░███████████▓████▒ ░░████░▓░ ████▓████████████▓██▒█████           
+          ░█▓▒▓▓▓▓▓▒░████████████████▓░▒ █  ░▓▒ ▓████▓████▓██████▓███░▓▓▓▓▓           
+           ▓▓▓▓▓▒▒▒░▓█████████████████▓▒   ░░░░░█████████▓███████████▓██▓▓▓           
+          ░▓▓▓▒▓▓▓▒░███████████▓████░░▓▓▓▓▓▓▓▓▓░████▓███▓███████▓████░░████░          
+           ▓▒▒▒▒▓▒░███▓██▓▓█▓▓██████░▒▓█▓▓▒▒░░░████▓█████████████████▓▓░░▒█░          
+          ░▒█▒▒▒▒░██████████▓▓██████▒▒▓▓▓▓▓▒░░█████████▓█████████████░███░░░          
+          ░▓▒▓▓▓▓▒██████████▓▓███████░▒░░▒░░░████████▓▓▓███▓▓▓▓██████░▓▓███           
+          ░▓▓▓▓▓▒░██████████▓▓████████████████████▓▒▓░▒█████████▓▒▓██░▓▓▓▓█           
+                
+        ");
+        
+        {
+            Console.WriteLine("🔥 Berserker enters the arena. The ground cracks beneath her boots.");
+            Thread.Sleep(1500);
+            Console.WriteLine("🩸 She takes damage... and smiles.");
+            Thread.Sleep(1500);
+            Console.WriteLine("⚔️ Her blade glows red. Her attack surges.");
+            Thread.Sleep(1500);
+            Console.WriteLine("💢 “Pain is fuel.”");
+            Thread.Sleep(1500);
+
+        }
+
+
+        Console.ResetColor();
+        Console.WriteLine("🏛️ All legends revealed. Press Enter to return to the main menu...");
+        Console.ReadLine();
+    }
+
+
+
+
+
+
+    static void SetupDeck()
+    {
+        List<Card> allCards = new List<Card>
+{
+   new Card("knight", 3, new Unit("Knight", 180, 25, "K", 1, false, 1)), // Basic melee tank
+new Card("archer", 2, new Unit("Archer", 100, 20, "A", 3, false, 1)), // Ranged single target
+new Card("giant", 5, new Unit("Giant", 300, 35, "G", 1, false, 1)), // Tower-pushing tank
+new Card("wizard", 4, new Unit("Wizard", 120, 40, "W", 2, true, 1)), // Splash damage caster
+new Card("valkyrie", 4, new Unit("Valkyrie", 200, 30, "V", 1, true, 1)), // 360° splash melee
+new Card("mini pekka", 4, new Unit("Mini P.E.K.K.A", 150, 60, "MP", 1, false, 2)), // High burst melee
+new Card("bomber", 3, new Unit("Bomber", 90, 35, "B", 2, true, 1)), // Ground splash thrower
+new Card("musketeer", 4, new Unit("Musketeer", 120, 30, "M", 3, false, 1)), // Long-range single
+new Card("bandit", 3, new Unit("Bandit", 100, 25, "Ba", 4, false, 2)), // Charge mechanic
+new Card("hog rider", 4, new Unit("Hog Rider", 180, 40, "HR", 3, false, 1)), // Building rusher
+new Card("skeleton army", 3, new Unit("Skeleton Army", 120, 8, "SA", 3, true, 1)), // Swarm melee
+new Card("ice golem", 3, new Unit("Ice Golem", 160, 10, "IG", 1, false, 1)), // Death slow tank
+new Card("dark prince", 4, new Unit("Dark Prince", 180, 25, "DP", 1, true, 1)), // Splash + shield
+new Card("baby dragon", 4, new Unit("Baby Dragon", 150, 30, "BD", 2, true, 1)), // Air splash flyer
+new Card("prince", 5, new Unit("Prince", 200, 50, "P", 1, false, 2)), // Charge burst melee
+new Card("goblin barrel", 3, new Unit("Goblin Barrel", 90, 12, "GB", 3, true, 1)), // Goblin deploy splash
+new Card("electro wizard", 4, new Unit("Electro Wizard", 120, 30, "ELW", 3, true, 1)), // Stun splash caster
+new Card("inferno dragon", 4, new Unit("Inferno Dragon", 100, 15, "ID", 2, false, 3)), // Ramping damage flyer
+new Card("royal giant", 6, new Unit("Royal Giant", 250, 40, "RG", 5, false, 1)), // Long-range tower pusher
+new Card("goblin gang", 3, new Unit("Goblin Gang", 100, 10, "GG", 2, true, 1)), // Mixed swarm
+new Card("ice spirit", 1, new Unit("Ice Spirit", 40, 8, "IS", 2, true, 1)), // Freeze splash
+new Card("battle ram", 4, new Unit("Battle Ram", 160, 45, "BR", 1, false, 2)), // Charge + spawn
+new Card("witch", 5, new Unit("Witch", 120, 25, "Wi", 3, true, 1)), // Skeleton spawner
+new Card("hunter", 4, new Unit("Hunter", 140, 50, "H", 1, true, 1)), // Close-range burst
+new Card("lumberjack", 4, new Unit("Lumberjack", 120, 40, "LJ", 1, false, 1)), // Rage drop on death
+new Card("mega minion", 3, new Unit("Mega Minion", 100, 30, "MM", 2, false, 1)), // Air single target
+new Card("executioner", 5, new Unit("Executioner", 140, 35, "Ex", 4, true, 1)), // Line splash thrower
+new Card("archer queen", 5, new Unit("Archer Queen", 150, 35, "AQ", 4, false, 1)), // Invisibility burst
+new Card("golden knight", 4, new Unit("Golden Knight", 160, 30, "GK", 2, false, 2)), // Dash chain melee
+new Card("fisherman", 3, new Unit("Fisherman", 120, 20, "F", 2, false, 1)), // Pull mechanic
+new Card("mother witch", 4, new Unit("Mother Witch", 120, 25, "MW", 3, true, 1)), // Curse spawner
+new Card("phoenix", 4, new Unit("Phoenix", 130, 30, "Ph", 2, false, 1)), // Revives once
+new Card("monk", 5, new Unit("Monk", 180, 20, "Mo", 1, false, 1)), // Damage reflection
+new Card("rascals", 5, new Unit("Rascals", 150, 15, "Ra", 3, true, 1)), // Mixed trio
+new Card("zappies", 4, new Unit("Zappies", 120, 12, "Z", 3, true, 1)), // Stun trio
+new Card("cannon cart", 5, new Unit("Cannon Cart", 160, 35, "CC", 3, false, 1)), // Shielded ranged
+new Card("royal recruits", 7, new Unit("Royal Recruits", 240, 20, "RR", 2, true, 1)), // Lane split swarm
+new Card("elixir golem", 3, new Unit("Elixir Golem", 220, 25, "EG", 1, false, 1)), // Splits on death
+new Card("electro giant", 8, new Unit("Electro Giant", 300, 40, "EGi", 1, false, 1)), // Reflects damage
+new Card("skeleton king", 4, new Unit("Skeleton King", 150, 30, "SK", 1, false, 1)), // Soul charge ability
+new Card("mighty miner", 4, new Unit("Mighty Miner", 180, 35, "MMi", 1, false, 2)), // Tunnel swap
+new Card("goblin drill", 4, new Unit("Goblin Drill", 90, 10, "GD", 1, true, 1)), // Underground goblin spawner
+new Card("miner", 3, new Unit("Miner", 100, 25, "Mi", 1, false, 1)), // Burrows to tower
+new Card("balloon", 5, new Unit("Balloon", 150, 60, "Bl", 1, false, 1)), // High tower damage
+new Card("dart goblin", 3, new Unit("Dart Goblin", 50, 20, "DG", 5, false, 1)), // Fast long-range
+new Card("barbarian barrel", 2, new Unit("Barbarian Barrel", 40, 15, "BB", 1, true, 1)), // Rolls + spawns
+new Card("firecracker", 3, new Unit("Firecracker", 60, 25, "FC", 4, true, 1)), // Splash knockback
+new Card("electro spirit", 1, new Unit("Electro Spirit", 30, 10, "ES", 2, true, 1)), // Chain stun
+new Card("goblin hut", 4, new Unit("Goblin Hut", 100, 0, "GH", 0, false, 0)), // Spawner
+new Card("flying machine", 4, new Unit("Flying Machine", 80, 30, "FM", 4, false, 1)), // Air sniper
+new Card("cannon", 3, new Unit("Cannon", 120, 35, "Ca", 3, false, 1)), // Stationary defense
+new Card("magic archer", 4, new Unit("Magic Archer", 90, 25, "MA", 5, true, 1)), // Piercing splash
+
+};
+        Card secretCardMK = new Card("Evo MegaKnight", 8, new Unit("Evo MegaKnight", 500, 250, "MK", 2, true, 1)); //MEGAKNIGHT
+        Card secretCard = new Card("Evo Pekka", 9, new Unit("Evo Pekka", 1000, 475, "EP", 1, false, 1)); //Butterfly
+        Card secretCardSparky = new Card("Sparky", 6, new Unit("Sparky", 120, 1000, "SP", 4, false, 1)); // Do I Say Much
+        Card secretCardGolem = new Card("Golem", 8, new Unit("Golem", 300, 100000, "GOL", 100, true, 1)); //Nothing Built Can Last Forever
+        Card secretCardWiggam = new Card("Ethan Wiggam", 6, new Unit("Wiggam", 100000, 600, "EW", 2, true, 2)); // Scottish chaos, door-breaking passive
+        Card secretCardBerserker = new Card("Berserker", 4, new Unit("Berserker", 250, 50, "BR", 30, false, 50)); // Special: Rage Surge — gains +10 attack every time he takes damage
+        Card secretCardPancakes = new Card("Super Mini P.E.K.K.A", 5, new Unit("Super Mini P.E.K.K.A", 1000000000, 1000000000, "SMP", 2, false, 3)); // Secret unlock: pancake-fueled juggernaut
+
+
+
+        playerDeck = new List<Card>();
+        Console.WriteLine("🃏 Choose 8 cards for your deck:");
+
+        for (int i = 0; i < allCards.Count; i++)
+        {
+            Console.WriteLine($"{i + 1}. {allCards[i].Name} (Elixir: {allCards[i].ElixirCost})");
+        }
+
+        while (playerDeck.Count < 8)
+        {
+            Console.Write($"\nSelect card #{playerDeck.Count + 1} by number (1–{allCards.Count}), or type 'info X' to preview card X: ");
+            string input = Console.ReadLine().Trim();
+            Card selectedCard = playerDeck.FirstOrDefault(c => c.Name.Equals(input, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedCard == null)
+            {
+                Console.WriteLine("❌ Card not in your deck.");
+            }
+            else
+            {
+                Console.WriteLine($"✅ Playing {selectedCard.Name}!");
+
+            }
+
+            if (input.StartsWith("info "))
+            {
+                if (int.TryParse(input.Substring(5), out int previewIndex) &&
+                    previewIndex >= 1 && previewIndex <= allCards.Count)
+                {
+                    Card preview = allCards[previewIndex - 1];
+                    Console.WriteLine($"\n📖 {preview.Name} Preview:");
+                    Console.WriteLine($"  Elixir Cost: {preview.ElixirCost}");
+                    Console.WriteLine($"  Health     : {preview.Unit.Health}");
+                    Console.WriteLine($"  Attack     : {preview.Unit.Attack}");
+                    Console.WriteLine($"  Speed      : {preview.Unit.Speed}");
+                    Console.WriteLine($"  Range      : {preview.Unit.Range}");
+                    Console.WriteLine($"  Splash     : {(preview.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {preview.Unit.Symbol}");
+                }
+                else
+                {
+                    Console.WriteLine("❌ Invalid preview number.");
+                }
+            }
+            else if (input == "unlock evo")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCard.Name))
+
+                {
+                    Console.Clear();
+                    Console.WriteLine("🌌 Initiating secret unlock sequence...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔓 Accessing hidden vault...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("⚡ Charging legendary core...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔥 Summoning Evo Pekka...");
+                    Thread.Sleep(800);
+                    Console.BackgroundColor = ConsoleColor.DarkMagenta;
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Clear();
+                    Console.WriteLine(@"
+███████╗██╗   ██╗ ██████╗     ██████╗ ███████╗██╗  ██╗██╗  ██╗ █████╗ 
+██╔════╝██║   ██║██╔═══██╗    ██╔══██╗██╔════╝██║ ██╔╝██║ ██╔╝██╔══██╗
+█████╗  ██║   ██║██║   ██║    ██████╔╝█████╗  █████╔╝ █████╔╝ ███████║
+██╔══╝  ██║   ██║██║   ██║    ██╔═══╝ ██╔══╝  ██╔═██╗ ██╔═██╗ ██╔══██║
+███████╗╚██████╔╝╚██████╔╝    ██║     ███████╗██║  ██╗██║  ██╗██║  ██║
+╚══════╝ ╚═════╝  ╚═════╝     ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
+                                                    
+                                 ▒▒                                                ▒▒                                                    
+                                 ▒▒░▒▒                         ░░▒                ▒▒░                                                    
+                                  ▒▒▒▒░░░                ░▒▒▒▒▒▒▒▒▒▒░░░       ▒░░░░░▒                                                    
+                                  ▒▒▒▒▒▒▒▒▒░░░░░░▒▒▒▒   ░▒▓▓▓▓▓▓▒▒▒▒▒▒▒░░░░░░░░▒▒▒▒▒▒                                                    
+                                  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▒▒▓▒▓█▒░░▒▓▒▒▓▓▓▓▒▒▒▒▒                                                      
+                                 ▒▒▒▒▒▒ ▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▓▓▓▓█▓▓▓▓▓██░░ ▒▒▒▓▓▓▓▒▒▒     ▓▓▒▒▒▓▓ ▒▓                                         
+                                ▒▒▒▒▒░▒▒      ▒▒▒▒▒▓▓▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒░   ░▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▓▓                                   
+                                ▒▒▒▒▒▒░▒▒      ░░░░░  ▒░▒▓▓▓▒▒▓▓▓▓▓▓▓░░░░░▒▒▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▓▓▓▒▒▒▒▒▒▒▒▓                                  
+                                ▒▒▒▒▒▒▒▒▒▒░  ░░▒▒▒▒▒▒   ▒▓▓█▓▒▓▓▓▓▓▒█▓  ░▒▓▓▓▒░░▒▒░░▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒                                  
+                                ▒▒▒▒▒▒▒▒▒▒░░▒▒▒▓▓▓▒▒▒░▒▒▒▓███▒▓▓▓▒▒▒▓▓▓▓▓▓▓▒▒▒▓▒▒▒▓▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓                                 
+                                ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓███▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒                                    
+                                ▒▒▒▒░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒▓███████▓▓▓▓█▓▓▓▒▒▒▒▒░░▒▒▒▒▒▒▒▒▒▒▒▒▒     ░░                               
+                               ░  ░▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▓▓▓▓▓█▓▓▓▒░░▒▒▒░░░▒▒▒▒▒▒▒▒▒░▒▒▒   ░▒░ ░▒▓▒░▒▒▒▒                         
+                             ▓▓▓█▓▓▓████████▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▓▒▒▒▒▒░▒▒▒░░▒▒▒▒▒▒▒▒▒░░░▒▒▒▓  ▒▓▓▓▒░▒▓▓▓▓▒▓▓▒                        
+                            ▒▒▓▓▓▓▓███▓█████████████████████▓▓▓▓▓▓▓▓▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▓▓▒░                       
+                               ▒▓▓▓▓██████████████████████████▓▓▓▓▓▒▒▒░░░▒▒▒▒▒▒▒▒▒▒▒▓▓▓█▓▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓                         
+                                  ▓▓███████▓█████████████▓▓▓▓▓▓▓▓▒▒░░░▒▒▒▒▒▒▒▒▒▒▒░░░░▒▒▒███▓▒▒▒  ▓▓▓▒▒▓▓▓▓█▓▓▓                           
+                               ░░░▒▓▓▓▓▒▒▒▓▓▓▓▓▓████████▓▓▓▓▓▒▒▒░░▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▓█▓▓▒▓███▓▓▓▓▓▓▓▓▓▓▓█████▓▓                            
+                              ░░░▒▒░░▒▓▒▒▒▒▒▒▓▓▒▒▒▒▒▓██▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▒░░▒▓▓████▓███▓▓▓▓▓▓▓████▓▓                              
+                               ░▒▒▓▒▒▒▒▒░▒▒▒▒▒▒▒▓▓▒▒░▒▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓██▓▓▒▒▒▒▒▒▒▓█▓▓▓███▓▓██▓▓████▓▒                               
+                                ░▒▒▒▒▒░▒▒▒▓▓▒▒▒▓▓▓▓▒▒░░▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓████▓▓███▓▓▓▒░▒░▒                             
+                             ░░░░░▒▒▒▓▓▓▓▓▓▒▒▒▒▓▓███▓▒░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓███▓▓▓██▓▓▒▒▒▒▓▓▓▓▓▓███▓▓▓▓▓▓▓▒▒▒▒                               
+                              ░░▒▒▓▓▓██▒░░▒▒▓▓▓▓▓▓▓▓▓▓▒▒░▓▓███▓▓▓▓▓▓▓▓▓█████████████▓▓▓▓▓▓▓▓▓▓▓▓█████▓█                                  
+                                 ▒▒▒▒▒░▒▒▓▓▓▓▓▓▓▓▓▓█▓▓█▓▓▒▓████▓▓▓▓▓▓▓▓▓▓██▓▓▓▓▓▓███████▓▓                                               
+                                  ▓▒▒▓▓▓██▓▓▓▓█▓▓▓███▓▓█▓▓▒▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓                                                
+                                   ▓▒▒▓▓▓▓█▓▓▓███▓▓██▓▓▓██▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▒                                                
+                                     ▒▒▓▓▓███████▓▓▓███████████▓▓▓▓▓▓▓▓▓▓███▓▓▓▓▓▓▒▒▓▓▒▒░                                                
+                                      ░▓▓██████████▒▒▓▓▓▓█████████▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▒░▒                                                 
+                                       ▓████ ██   ▓░▒▒▓▓▓▓▓▓▓▓███████▓▓▓▓█████▓▓▓▓▓▒░▒▒▒                                                 
+                                                  ▓░▒▓▓▓▓▓████▓▓▓▓▓▓▓▓▓███████▓▓▒░░▓▒▒▒▒▒                                                
+                                                  ▓░▒▓▓▓▓▓████████▓█▓▓▓▓▓▓▒▒▒▒░░▓▓▒█▓▒▒▒▒                                                
+                                                 ▓▒▒▒▒▓▓▓▓███████████▓███████▓▓▒▓▒▓██▒▒▓█▓                                               
+                                                 ▓▒▒▒▒▓███████████████▓█████▓▓▓▓▓▓███▓▓███                                               
+                                                ░▒▒▒▓▓▓██████████████▓█▓▓███▓▓▓▓▓██████                                                  
+                                                ▓██▒▓█████████████    ███▓▓█▓▓▓▓█████▓                                                   
+                                                  ░▒▓███████████       ███▓▓▓▓▓█████▓▓▓                                                  
+                                                   ▓██████████          █████▓██████▓                                                    
+                                                   ▓████████              ██████████▓▓▒   ▓▓▓                                            
+                                              ▒▓▓░▒▓██████                     ▓████▓▓▓▓▓▒▒█▓▓                                           
+                                             ▓█▓▒▒▓▓█████                        ██████▓▓▓▓▓█                                            
+                                             ▓█████████                                ████                                              
+                                                                                                                   
+");
+
+                    Thread.Sleep(1000);
+                    Console.WriteLine("🧠 Secret card unlocked: Evo Pekka added to your deck!\n");
+
+                    Console.WriteLine("📖 Evo Pekka Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCard.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCard.Unit.Health} 💪");
+                    Console.WriteLine($"  Attack     : {secretCard.Unit.Attack} 🔥");
+                    Console.WriteLine($"  Speed      : {secretCard.Unit.Speed} 🐢");
+                    Console.WriteLine($"  Range      : {secretCard.Unit.Range} 🎯");
+                    Console.WriteLine($"  Splash     : {(secretCard.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCard.Unit.Symbol}");
+                    Console.WriteLine("💥 This card can turn the tide of battle — use it wisely.");
+
+                    playerDeck.Add(secretCard);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Evo Pekka is already in your deck.");
+                }
+            }
+            else if (input == "MEGAKNIGHT")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardMK.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("🌌 Initiating brute force unlock sequence...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔓 Cracking arena floor...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("⚡ Charging seismic armor...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔥 Summoning Mega Knight...");
+                    Thread.Sleep(800);
+                    Console.BackgroundColor = ConsoleColor.Gray;
+                    Console.ForegroundColor = ConsoleColor.Black;
+                    Console.Clear();
+                    Console.WriteLine(@"
+
+
+███    ███ ███████  ██████   █████      ██   ██ ███    ██ ██  ██████  ██   ██ ████████ 
+████  ████ ██      ██       ██   ██     ██  ██  ████   ██ ██ ██       ██   ██    ██    
+██ ████ ██ █████   ██   ███ ███████     █████   ██ ██  ██ ██ ██   ███ ███████    ██    
+██  ██  ██ ██      ██    ██ ██   ██     ██  ██  ██  ██ ██ ██ ██    ██ ██   ██    ██    
+██      ██ ███████  ██████  ██   ██     ██   ██ ██   ████ ██  ██████  ██   ██    ██  
+                                                                                              
+                                                      ░▒░                                                                                             
+                                                    ░▒▒▒▓▒                                                                                            
+                                                  ░▒▒▓▓▓▓▓▓░                   ▒▒▒▒░                                                                  
+                                                 ▒▓▓▓▓▒▒▒▓▓▓▒                 ▒▒▓▒▒▒▒                                                                 
+                                             ░▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓░                 ▓▓▓▓▒▒░                                                                
+                                           ▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░               ░░ ▒▒░                                                                
+                                         ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒                  ▒▒                                                                
+                                        ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒                 ▒▒                                                                
+                                     ░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓▒░             ▒▓▓░▒                                                               
+                                   ▒▒▒▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▒▒░ ░     ░░░░░▒▒▒░ ░                                                             
+                                   ░▓▒▒▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓ ▓█▓▓▓▓▓▓▓▓▓▒▒▒▓▓▓░                                                            
+                                      ▒▓▓▓▓█████▓▓▓▓▓▓▓▓█▓▓▓▓▒▒▒▒▓█▓▓▒  ▓▓▓▓▓▓▓▓▓▓▓▒▒▒▓▓▓▒░                                                           
+                                        ▒▓▓███████████▓▓█▓▓▓▓▓▓▓▓██▓▒▓░ ▓█▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓░░░                                                         
+                                         ▒████████████████████████▒░▓▓▓▒████▓▓▓▓▓▒▓▓░░▒█▓▓▒▒▓▓▒                                                       
+                                          ░▓█████████████████████░ ▒▓███▓▓▓▓▓▒▒▓▒░░░░▒▓▓▒▒▓▓▓▒▒                                                       
+                                            ░▓█████████████████▒  ▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▒░                                                      
+                                              ░████████████▓▒  ░░░▓████████████▓▓▓▓▓▓█▓▓█▓▓█▓▒░                                                       
+                                             ░▓▓▓█▓▓▓▓▒▒▓▓▓▒ ░▒▒▒▒▓▓███████████▓▓▓▓▓██▓▓█▓▓▒▓▓▒░░                                                     
+                                                ▒▓██▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓██▓██████████▓▓▓▓█▓▓▓▓▓▓▓▓▒▒▒░▒▒░                                                  
+                                                ▒▒▒▒░░░░░░░▒███▓▓▓▓▓██▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒░▒░                                                  
+                                                ▒▒▒▒░░░░░░░▒█▓█▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▒░░░                                                   
+                                                ▒▒▒▒▒░░░░░▒▓▓▓█▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒   ░ ░░                                                
+                                                 ▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒░░░▒▓░░░     ░░                                              
+                                                        ░▒▒░░▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░░░░░░▒▓▒▒▒▒░░░                                                  
+                                                              ▓▓█▓▓██▓▓▓██▓▓▓▓▓▓▓▓▒▒▒░░ ░░▒▓▓▓▓▓▓▒▒▒░░░░░                                             
+                                                              ▓▓▓▓▓▓█▓▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒█▓▓▓▒▒▒▒▒▒▒▓▓▓▒░                                         
+                                                              ▓▓▓▓▓▓█▒▒▒▒▒░░░░░░▒▓▓▓▓▓▓▓▒▒▒▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒░░                                       
+                                                              ▓▓█▓▓██▒▒▒░▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▓▒▒░░░░░░░░                                   
+                                                             ░▓▓▓▓▓▓█▒▒▒░▒▒▒▒▓▓██▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒                                   
+                                                               ▒▓▓▓▓█▒▒▒▒▓▓▒▒▓▓██▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▒░                                   
+                                                              ░░▒▒▓▓▓▒▒▒▒▒░░░░░▒▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓█▓▓▓▓▓▓░                                   
+                                                              ░▒▒▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓█▓▓▓▓▓                                   
+                                                             ░░▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓                                   
+                                                              ░▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓████████████▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓█                                   
+                                                             ░▓███▓▒▒▒▒▒▒▒▓▒▒▓▓▓▓▓▓██▓██████▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                                   
+                                                             ░▓██████▓▒▒▒▒▒▓▓▓▓▓▓▓▓█████▓▓▓▓▓▒▒▒▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░                                   
+                                                           ░▒▓▓▓██████▓░     ░░  ░   ██▓▓▓▓▓▒▒▒░▒▒▓██▓▓▓▓▓▓▓▓▓▓▓▓▓░                                   
+                                                          ▒▓███████████▒              ▓▓▓▓▓▒▒░░▒░▒▒▓██▓▓▓▓▓▓▓█▓▓▓▓░                                   
+                                                          ▒█▓▒▓▓███████▒              ▓██▒▒▒░░▒▒▓▓████████████▓▓▓▓░                                   
+                                                             ░▒▓▓▓▓▓█▓░               ░▓█▓▒▒▓▓▓██████████████▓▓▓▓▒░                                   
+                                                        ▒▓▓▓▓▓▓▒▒▓▓▒▓░                 ░▒▒▒▓█▓▓▓███▓▓░                                                
+                                                        ░▒▓▓▓▓▓▓▓▓▓░                      ░▒▓████▓▓▓▒░                                                
+");
+                    Thread.Sleep(1000);
+                    Console.WriteLine("🧠 Secret card unlocked: Mega Knight added to your deck!\n");
+
+                    Console.WriteLine("📖 Mega Knight Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCardMK.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCardMK.Unit.Health} 💪");
+                    Console.WriteLine($"  Attack     : {secretCardMK.Unit.Attack} 🔥");
+                    Console.WriteLine($"  Speed      : {secretCardMK.Unit.Speed} 🐢");
+                    Console.WriteLine($"  Range      : {secretCardMK.Unit.Range} 🎯");
+                    Console.WriteLine($"  Splash     : {(secretCardMK.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCardMK.Unit.Symbol}");
+                    Console.WriteLine("💥 This card enters with a slam and crushes crowds — deploy with impact.");
+                    Console.ResetColor();
+                    playerDeck.Add(secretCardMK);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Mega Knight is already in your deck.");
+                }
+            }
+            else if (input == "SPARKY")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardSparky.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("⚙️ Initializing high-voltage unlock sequence...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔋 Charging Tesla core...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("⚡ Overloading magnetic rails...");
+                    Thread.Sleep(1000);
+
+                    Console.BackgroundColor = ConsoleColor.Gray;
+                    Console.ForegroundColor = ConsoleColor.DarkBlue;
+                    Console.Clear();
+                    Console.WriteLine(@"
+
+
+░██████╗██████╗░░█████╗░██████╗░██╗░░██╗██╗░░░██╗
+██╔════╝██╔══██╗██╔══██╗██╔══██╗██║░██╔╝╚██╗░██╔╝
+╚█████╗░██████╔╝███████║██████╔╝█████═╝░░╚████╔╝░
+░╚═══██╗██╔═══╝░██╔══██║██╔══██╗██╔═██╗░░░╚██╔╝░░
+██████╔╝██║░░░░░██║░░██║██║░░██║██║░╚██╗░░░██║░░░
+╚═════╝░╚═╝░░░░░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚═╝░░░╚═╝░░░                                                                 
+                                                               ░░▒                                                                
+                                                              ░░░░▒                          ▒▒▒                                  
+                                                               ▒░ ░▒▒▒▒▒▒ ▒░▒░░            ▒░ ░▒        ▒░  ░░▒▒▒▒▒▒▒▒▒▒▒         
+                                                                ░   ░░  ░▒░░░░▒ ▒▒▒▒▒░░▒░▒▒░░░▒▒░░▒   ▒░░░▒░░░▒▒░░       ░▒       
+                                                            ▓▓▓▓▒░         ░░░░░░░   ░░░    ▒▒░░ ▒▒      ▒░░░              ░▒     
+                                                        ▓▒▓▓▓██▓▓▓░ ░            ░  ░░░  ░░ ░░ ░░░░░░▒▒▒▒░░                ░░     
+                                           ▓▓   ▒▒▓▓▒▒▓▓▓▒▓▓▓███▓▒░ ░░  ░ ░ ░░   ░░░ ░▒  ░                                  ░     
+                                       ▓▓▓▓▓▓▓▒▓▒▒▒▓▒▒▓▓█▓▓▓▓███▓░░ ░    ▒░ ░▒░ ░  ░░░▒░                                  ░░▒     
+                                      ░▓███▓▓▓▓▓▓█▒█▓█▓▓██▓▓▓████▒░  ░   ▒▓░░▒░ ░░▓▓▒░▒▒ ░░           ░░▒▒░▒░░░▒░░░      ░░       
+                                       ▓██████▓▓██▓▓██▓▓██▓▓▓████▓░  ░░ ░▒▓░  ░  ░▓▓▓░▒▒▒░▒         ░░░      ▒░     ░░░░▒         
+                                       ▓██████▓▓██▓▓███▓██▓▓▓████▓▒  ░▒░░░   ░▒▒▒▒▓▓▓░░▒▒░░       ░▒▒░░░▒   ▒░   ░░░░▒            
+                                       ▒███████▓██▓▓███▓████▓▓███▓▒   ▒▒▒▒▒▒░░▒▒▒▒▒▓▒░ ▒▓▒░   ░░░   ░▒░░░     ▒                   
+                                       ▒███████▓███▓███▓████▓▓██▓▒  ░▒▒▒▒▒▓▓▓░▒▓▒▒░▒       ░░░  ░▒░░░░░░▒                         
+                                       ▒███████▓███▓███▓███▓█▓█▓▓▒▒▒▒▒▓▓▒▒▒▓▓▒░▓▓▒▒  ░░░░░░░░░░░░░░▒ ▒░░░▒                        
+                                       ░███████▓███▓███▓█████▓▓▓▓▓▓▓▒░▒▓▓▒▒░▒▒░░▓▓▒░ ░ ▒▒▒░  ░░▒                                  
+                                       ░▓████████████▓▓██▓▓█▓▓▓▓▓▒▒▒▒░░▒█▓▓▒░░░ ░░░░░ ░▒  ░░▒▒                                    
+                                       ░▓█████▓███▓▓█▓▒▒▓▓▓▓▓▓▓▒▒▒▒▒▒░  ▒▓▓▓▒▒ ░  ░░░░▒                                           
+                                        ▓████▓▓▓█▓▓▓█▓█████████▓▒░▒▒▒░░▒▒ ▒▓▒░  ░░▒▒░▒                                            
+                                        ▒▓███████████████████▓▓▒░░░░░░░░░     ░░░░░░░▒                                            
+                                          ▓▓█████████████▓▓▓▓▓▓▒▒░░▒▒▒░░░░░░░░░░░▒▒▒▒▒▓▒                                          
+                                           ▒▓▓▓█▓▓▓▓▓▓▓▓▒▒▒▒▓█▓▓▒▒▒▓█▓▓▓█▓▒░░▒▒▓▒▒▒▒▒▒▓▓                                          
+                              ▒▒▒▒▓▓     ░░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓████▓▓▒▒▓██████▓▒▒▒▒▓▓▓▓██▓▓▓▒░░░                                      
+                              ▓▓██▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▒▒▓██████▓▒▒▒▒▓▓█████▓▓▓▒▒▒▒                                     
+                              ▓▓█▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█████▓▓▒▒▓▓▓▓▓▒▒▒▒▒▒▓█████▓▓▓▓▓▒▓                                      
+                             ░▓██▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▓▒▒▓▓▓▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓                                       
+                             ░▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████████▓▓▓▒▒▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓                                       
+                             ▒▓██▓▒██▓▓▓▓▓▓▓▓██████████████████▓▓▓▓▓▓▓▓▒▒▒░▒▒▓▓▓▓▒▒▓▓▓▓▓▓▓▓▓                                      
+                             ▒▓█▓▓▓███████████████████████████▓▓▓▓▓▓▓▓█▓▓▓█▓▓▓▓▓▓█▓▓██▓▒▓▓▓▓                                      
+                             ▒▓█████▓██████████████████▓▓█████▓▓▓▓▓▓▓▓██████▓▓▓▓▓█▓█████▓▓▓▓▒▒░░                                  
+                      ░░     ░▓███▓▓▓▓▓███████████████▓▓▒   ░▒▓▓▓▓▓▓▓▓██████▓▓▓▓▓███████▓▓▓▓▓▒▒▒                                  
+                   ▒▒▓▓▓▓▒▒░░░░▒▓▓▓▓▓█████▓██▓▓██████▓▓▓▒░░░░░░▒▓██▓▓▓███▓▓▓▓▓▓▓▓▓█████▓▓▓▓▓▓▓                                    
+                  ▓▓▓▓█████▓▓▒▒▒▒▒▓▓█████▓▓▓▓▓██████▓▓▓▓▒░░░░░░░▒███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░                               
+                 ▒▓▓▓████████▓▒▒▒▒▒▓██████████████▓▒▓█▓▓▒▒▒▒▒▒░░▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░                              
+                 ▓▓▓██████████▓▒▒▒▒▓██████████████▓▓▓█▓▓▓▓▓▓▓▒▒▒▓████████████████████████████▓▓▒▒▒▒░░                             
+                 ▓▓▓█▓▓▓███████▓▓▓▓▓█████████████▓▓██▓▓███▓▓▓▓▓███████████████████████▓▓█████▓▓▓▓▓▓▒░                             
+                 ▓▓▓▓█▓▓▓██████▓▓▓▓▓██████████████▓██▓▓█████▓▓█████████████████████████████████▓▓▓▓▒░                             
+                  ▓▓▓▓██████████▓▓▓▓█████████████▓▓▓▓▓██████▓▓██████████████████▓▓▓▓▓▓▓▓█████████▓▓▒▒                             
+                   ▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓███████▓▓▓▓▒▒▒▒▒▓▓▓▒▒▒▒▒▒▒▒        ▒▓████████▓▓▒                             
+                                                ▒▒▓▓███████▓▒▒                          ▒▒▓███████▓▓                              
+                                                ░▒▒▓▓▓███▓▓▒                             ▒▓▓████▓▓▓▒                              
+                                                    ▒▒▒▒▒▒▒                                ▒▒▒▒▒▒▒                                                             
+");
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("🧠 Secret card unlocked: Sparky added to your deck!\n");
+
+                    Console.WriteLine("📖 Sparky Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCardSparky.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCardSparky.Unit.Health} 💪");
+                    Console.WriteLine($"  Attack     : {secretCardSparky.Unit.Attack} ⚡");
+                    Console.WriteLine($"  Speed      : {secretCardSparky.Unit.Speed} 🐢");
+                    Console.WriteLine($"  Range      : {secretCardSparky.Unit.Range} 🎯");
+                    Console.WriteLine($"  Splash     : {(secretCardSparky.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCardSparky.Unit.Symbol}");
+                    Console.WriteLine("💥 Sparky charges up and unleashes devastating bursts — one shot can change everything.");
+                    Console.ResetColor();
+                    playerDeck.Add(secretCardSparky);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Sparky is already in your deck.");
+                }
+            }
+            else if (input == "GOLEM")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardGolem.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("🪨 Activating ancient stone protocol...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔧 Reinforcing obsidian shell...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("💥 Preparing seismic entry...");
+                    Thread.Sleep(800);
+
+                    Console.BackgroundColor = ConsoleColor.DarkGray;
+                    Console.ForegroundColor = ConsoleColor.DarkMagenta;
+                    Console.Clear();
+                    Console.WriteLine(@"
+ ██████╗  ██████╗ ██╗     ███████╗███╗   ███╗
+██╔════╝ ██╔═══██╗██║     ██╔════╝████╗ ████║
+██║  ███╗██║   ██║██║     █████╗  ██╔████╔██║
+██║   ██║██║   ██║██║     ██╔══╝  ██║╚██╔╝██║
+╚██████╔╝╚██████╔╝███████╗███████╗██║ ╚═╝ ██║
+ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝                                                                                                                                                                   
+       
+       ░█████████████▓ ░▓▒▒▒▓▒▒▒▒▒░░░░░ ░░░░░░░░▓▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░ ▒░░░░ ██████████        
+       ░████████████▓ ░▓▓▒▒░░░▒▒▒▒▒▒▓▒░▒▒▓▒▒░░░░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ░░░░░░ █████████        
+       ░████████████  ▓▓▒░░▒▒▒▒░░▒░░░▒▓▒▒░░░░▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ░░░░▒░ ████████        
+       ░███████████  ▒▓▓▓▓▓▓▓▒▒▒▓▓▓▒▒░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░░░░░░░▒░ ░ ░░░░░▒▓▒ ███████        
+       ▓██████████  ░░█▒▓▒░░░▒▒▒░░░░░▒▒▒▒▒▒░░░░▒▒░░░░░░░░░░░░░░░░░░░░░░░░  ░░▒▒░ ░░░▒▓░▓██████        
+                ░  ▒░░█░▓▓▒▓█▒▒░░░▒▒░░░░░░░░░░░░   ░  ░░░░░░░░░  ░░░░░░ ░░▒▒░░░▒░ ░░░▒▒░▒█████░       
+         ▒███▓▓██░░░░██▒░░▓▒░░░░▒░░░░░░▒▒▒░▒▒░░▒▒▒▒░░▒░░▒░░░░▒░░░░░▒░  ▒▒░░░░░░░░░░▒░░▒▒░█████        
+       ░█▓▒▒▒▓▒█  ░▒ ▓▓██▓▓▓███░▒▒▒▒░░░░░░░░░▒▒░  ▒░  ░░░░░░  ░░░▒▒░░░▒░░░░▒░░░▒▒▒ ░░░▓▓▓             
+       ░█▓░▒▓▓▒█  ▒▒▓▓█▓▓███▓▓▓▓█▒████████▓██▓█████████████▓███▓▒▒▒▒▓░░▒▒░░░░░   ░░▒█▒░▓██░▓▓▓        
+       ░██▒░▒▒▒█ ░░ ▒█▓▒▓▒▓▓▓▓▓▓▓████████████▓▓▒▓▓▓▓▓▓▓▓▒▓▓▒▓▓▓▓▓▒▓▒▒▒░ ░▒▒▒░▓▒░░░████░▒▒█░▒▒▒        
+       ░██▓█▒▒▓▓ ██▒█▓▒▓▓▓▓▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓▓▒▓▓▒▓▓▓▒▒▒▒▒▒▓▒░  ░░░▒░░░▓█████░░▒█ ░▒░        
+       ░███▓███▓ ▒████████▓▓▓▓▓▓██▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓██░▓████████▓▓█░░▒░██░▓▒        
+       ░████▒ ▓▓ ▒██████▓███████████▓▓▓▓▓█▓██▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓█████████▓▓▓▒▓█▒▒▒▒░░░░█▓░▓░        
+       ░██   ▒██ ▓█████▓▒▒▒▓▒▓▓█████████▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▒▒▒▒▓█████▓▒      ░▒██▒▓▓▒▒░░░█░░ ░        
+       ░██ ███▓█ ░██████▓░        ▒▓▓▓▓▓▒▓█▓▓▓█▓██████████▓█████▓▒▒▒░░    ░▒▒██▓░▒▒▒░▒░░▒█░░▒▓        
+       ░██ ▓▒▒░█░░████████▒░      ░░░▓████████████████████████████▓▒░▒▒▓▓▓▓███▒░▒▓▓░▒░░ █ ▒▒▒░        
+       ░██ ▒█▒▒██ ▓▓████████▓▓▓▓▒▒▓▓████████████████████▓███████████████████▒▒▒▒▒▓░░█░░ █ █▓▒░        
+       ▓██ ░▓░▓██░▒▓█▓▓▓█████████████████▓██▓▓▓▓▓▓▓▓▓███▓▓▓▒▒▒▒▓▓▓▒▓▓▒▓▒▒░░░░░▒▓▓▓░░█░░█▒ ▒▒▒▓        
+       ▒█▒ ▒▓░▓██▓▓▓██▓▓▓▓▓▒▓███▓▓███▓▓▓▓█▓▓▓▓█▓▓▓▓▒▒▒▒▒▓▓▓███▓▓▓▓▒▓▓▓▓▒▒▒▒▒▓▓▓▒░░ ░█▓█▓▒░░  ░        
+       ▓█  ▒█░░█▓█▓▓▓███▓▓▓▓▓▓▒▓▓▓▓▓██████▓▓▓▓▓▓▓▓▓▓██▓▒▒▒▒░▒▒▒▒▒▒▓▒▓▒▒▒▒▒▒▒▒▓░░░░ ███▓▓░░▒▒░░        
+       ██  ░▓▒▒██▓██████▓▓▓▓▓██▓▓▓█▓▓▓▒▓▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒▒▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒░░░▒▓▓▒    ████░░░░ ░▒░        
+       ▓█  ░░▒░ ░▓▓██████▓▓██▓▓▓▓▓▒▒▓▒░░░░▒▓▒▒▒▒░▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░▒█░▒░░ ▓████    ░▒▒░  ░        
+       ██ ▒▓█▓▓█▓▒  ▒▒█████▓▓███████▓▓████▒▒▓▓▓▓▓▓▒░▒░░▒▒▓▒▓▓▒▒░▒▒▒▒▒██████▓███░    ░▒░░░░            
+       ▒█░▓▒▒▒▒▓▓██▓▓   ░▒██████▓▓▒▒██▓███▓█▒▒▓▓▓▓▓████████████████████████     ░▒▓▓░░    ████        
+       ░█████▓▒░░▒▒▓▓▓██▓░  ░▒██████████████████████████▓▒▒▒░           ▒█░▒██░      █████████        
+       ░██▒▓█████▒▒▒▓▓██ ▒▓▓▓▓▒▒░       ▒████████                         ████████████▓███████        
+       ░███▒▓▓█████▓▓▓█▒░░░ ░░░▒▒▓▓▓▓▓▒▒▒░░░  ░ ▓▓▒▒░▒░░░▒▒▒▓▓▓██████████▒ ██▓▓███▓██████▓███▒        
+       ░████▓▓████████████████▒░░ ░░░░░      ▒▓██▓████████████████████████▒░▓▓▓█▓███▓▓██████░█        
+       ░█████▓▓▓█████▓███▓▓██████████████████▒▓████▓█████▓██▓▓▓▓▓▓▓▓████████████▓▓▓▓▓██▓█▓▓███        
+       ▒██████▓██▓██████▓▓███▓██▓█▓▓▓▓▓███████████████████▓██▓▓▓█████████▓█▓██▓▓██▓▓▓▓▓▓▓████▒        
+       ▒███████▓████▓▓███▓████▓▓█▓▓▓▓▓██▓▓████████▓▓▓▓▓▓▓▓▓███▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓███░░░▒        
+       ▒█▓██████▓████████▓██▓▓▓▓▓██▓██▓▓▓█▓▓▓▓▓█▓▓██▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▓▓▓▓█▓▓▓███░▓▒▓▓        
+       ▒█▓███████▓▓████▓███▓▓█▓█▓█▓▓▓██████▓▓███████▓▓▓▓▓▓███████████▓▓▓▓▓▓▓▓█▓▓███▓████░░▓▒▓▓        
+       ▒█▓█████████▓▓███████▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▓█▓▓▓▓▓▓▓███▓██▓█▓█▓▓█████░░░▒░▒▓▓        
+       ▓█▓████████████▒▓▓█▓▓███▓▓▓▓██▓████████▓██████▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓███▓░░░▒▓▓▓▓▓▓█        
+        ▓▓▓███████████████▒▒▓▓▓█████████████▓██▓▓█▓▓▓███▓▓▓▓▓▓███▓▓▓▓▓█████▓▓▓▓▓▒▒▒█████▓█████        
+       ░█▓▓██████████████████▓░░░░▒▒▓▓▓███████████▓███▓█████████▓████▓▓▓▓▓▒▓██▓▓██▓▓▓▓▓▓▓▓▓▓▓█        
+       ▓█▓▓███████▓███▓▓█████████████▓▒░░░░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░▒▒▒▓██████▓▓█▓██▓▓█▓▓▓▓▓▓▓█        
+       ▓█▓▓█▓████████▓██████████████████████████████████████████████████▓▓▓▓█▓▓▓█▓██▓▒▓██▓▓▓▓█        
+       ▓██▓████████▓█████████████████████▓▓████████████████████████▓█████████████▓▓███▒▓▓▓▓▓▓█        
+       ░▒▓▓▒▒▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▒▒░░░░▒▒▒▒▒▒▒▒▒░▒░░░░▒▒░░░░░░░░░░░░░░░░░░░   ░░ ░                                                                                                                                                                                                                                                                                                                          
+");
+                    Thread.Sleep(1000);
+
+                    Console.WriteLine("🧠 Secret card unlocked: Golem added to your deck!\n");
+
+                    Console.WriteLine("📖 Golem Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCardGolem.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCardGolem.Unit.Health} 🪨");
+                    Console.WriteLine($"  Attack     : {secretCardGolem.Unit.Attack} 💥");
+                    Console.WriteLine($"  Speed      : {secretCardGolem.Unit.Speed} 🐢");
+                    Console.WriteLine($"  Range      : {secretCardGolem.Unit.Range} 🎯");
+                    Console.WriteLine($"  Splash     : {(secretCardGolem.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCardGolem.Unit.Symbol}");
+                    Console.WriteLine("The Way It Smirks...");
+                    Console.WriteLine("Nothing Built Can Last forever");
+                    Console.ResetColor();
+                    playerDeck.Add(secretCardGolem);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Golem is already in your deck.");
+                }
+            }
+            else if (input == "WIGGAM")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardWiggam.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("🏴 Charging Highland energy...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🧠 Translating ancient Scottish banter...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🚪 Reinforcing nearby doors (too late)...");
+                    Thread.Sleep(800);
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("\n🚪 Door Status: STABLE");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🚪 Door Status: SHAKING...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🚪 Door Status: CRACKING...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🚪 Door Status: COLLAPSING...");
+                    Thread.Sleep(500);
+                    Console.Clear();
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.WriteLine(@"
+
+██████╗░░█████╗░███╗░░██╗░██████╗░
+██╔══██╗██╔══██╗████╗░██║██╔════╝░
+██████╦╝███████║██╔██╗██║██║░░██╗░
+██╔══██╗██╔══██║██║╚████║██║░░╚██╗
+██████╦╝██║░░██║██║░╚███║╚██████╔╝
+╚═════╝░╚═╝░░╚═╝╚═╝░░╚══╝░╚═════╝░    
+");
+                    Thread.Sleep(800);
+                    Console.ResetColor();
+                    Console.WriteLine("💥 The door has collapsed under Wiggam’s presence.");
+                    Console.WriteLine("🗣️ \"Bro, the door was already weak. I must be trippin.\"");
+
+                    Console.BackgroundColor = ConsoleColor.White;
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Clear();
+                    Console.WriteLine(@"
+
+░██╗░░░░░░░██╗██╗░██████╗░░██████╗░░█████╗░███╗░░░███╗
+░██║░░██╗░░██║██║██╔════╝░██╔════╝░██╔══██╗████╗░████║
+░╚██╗████╗██╔╝██║██║░░██╗░██║░░██╗░███████║██╔████╔██║
+░░████╔═████║░██║██║░░╚██╗██║░░╚██╗██╔══██║██║╚██╔╝██║
+░░╚██╔╝░╚██╔╝░██║╚██████╔╝╚██████╔╝██║░░██║██║░╚═╝░██║
+░░░╚═╝░░░╚═╝░░╚═╝░╚═════╝░░╚═════╝░╚═╝░░╚═╝╚═╝░░░░░╚═╝
+            
+             ░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▓▒░░░▒███░░░░░░░░░░░░░░░░░░░░░██░▒▓░          
+           ██▓▓▓▓▓▓███▓▓██▓▓▓▓▓▓█░░░░███▓░░▒░░░░░░░░░░░░░░░░░░░░░█░░░░           
+           ░▓█▓▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓░▒▒▓▓█████▓░█████░░░░░░░░░▒▒░░░▒░░█▒░░░           
+           ██▓▓▓▓▓▓▓▓████▓▓▓▓▓████████▓▒█████████████▒░░░░░░░░░░░█▓░░▒░          
+           ▓██▓▓▓▓▓▓███▒▒█████░░ ░▓████▓████▓███░███████░░░░░░░░░█▓░░░░          
+           ▓█▓▓▓▓▓███▓ ░   ░  ░▒██░░░▒▒     ▒▒███████▓████░░░░░░░█▓░░░           
+           ▓▓▓▓████▓░░▓█████████▒▒████████████▓░░▓██████████░░░░░██░░░░          
+           █▓▓▓██▒  ▒█▓▓▒▒░ ░   ░░░░░░░▒░▒░▓▓████▓░░░▒█████████░ ██░ ░█          
+           █▓▓██░░░▓░░      ░              ░░░░░▒▓███░░▓████████ ░█ ▒██          
+           ▓█▓█▒ ▒▒    ░░░░░▒▒▒░▒▒░░░▒▒░▒▒▒░░░░░░░░░▒███▒▒▒▓██████████░          
+          ░███▓░░░  ░░░░░░░░▒░░▒░░░▒▒▒▒▒▒▒▒░░▒░░░ ░░░░░▓▓▓▒▓▒▓▓▒▒▓▒▒▓▓░          
+          ░▓▓█▒░ ░░░░░ ░░░░░ ░░░░░▒▒░▒▒░▒▒▒▒▒▒░░░░▒░░░░░▒▒▓▒▒▒░▒▓██▓▒██          
+           ▒██▒  ░░ ░░░▒▒▒▒▓▓▒▒░░░░░░▒▒▒▓▒▒▒░▒▒▒▒▒░░▒▒░░░░░░▒▓▒▓█▓██░            
+          ░███  ░ ░░▒▒▒░░░▒░░▒▒▒▓▒▒▓▒▓▒▒▒▒▒▓░▒▒░▒▒▒▒▒░▒▒▒░▒░▒▒▒░▓█████▓          
+           ▒█░  ▒▒░░░▒░░░░░▒▒░▒▒▒▒▒▒░░▒░░░░▒░▒▒▒▒▒▒▒▒▒▒▒▒░▒▒░▒▒▒░▒▓██▓           
+           ███ ░░░░░░░░░▒▒░▒▒░░▒▒░▒▒░░░░▒░░▒▒░░▒░▒▒▒▒▒▒▒▒▒▓▒▒▒▒▒▒▓████▒          
+          ████  ░░░▒░░░░░░▒▒░░▒▒░▒▒▒▒▒▒▒▒▒░▓░▒▓▓▒▒▒▒▒▒▒▓▒▒▓▓▓▒▒▒░▒████▓          
+          ▓█▓█ ░▒▒▒▒▒░▒░▒░░░▒░▒▒▒▒▒░░▒░░░▒▒▒▓▒░▒▒▒▒░░▒▒▒▒▓▒▒▒▒▒▒░░████▒          
+          ██▓█ ░░░░▒▒▒▒  ░░░░░░░░▒▒▒▒░▒░▒▒▒▒░▒▒▓▒▒▒▒▒▒▒▒▒▓▓▓▒▒▒▒▒░████▒          
+          █▓██ ░░░░▒░▒▓████▓▓░▓░░▒░░▒▒▓▒▒▒▒░▒░▒░▒▒▓▒▒▒▒▒▒▒▒▓▓▓▓▒▒░███▓▒          
+          █▓ ▒▒ ░░░░░ ░    ░░░▓▓▓░▒░▒░▒░▒░▒░░░░░░ ░░░▒▒▒░░▒▒▓▓▒░▒▓████▒          
+          █▓▒░░ ░▒ █▓▓██▒▒    ░░▒░▓░▒▓▓▒░▒░▒▒█████▓▒▒▒░▒▓▓▓▒▓▒░▒▒████▓▒          
+          █▓█▒░░▒▓▒███ ███████▓ ░░░░▒▒░░░▓▓▓▒▒▒▒░░░▒▒▓▒▒▒▓█▓▒▒░▒████▓▒█          
+          ▓▓░ ░ ▒▒▒        ░██▓▒    ░▓▓▓██▒▒░░        ░░▒▓▒▓▒▒░░███▓▓██          
+          ▓▓█▒▒░░▒▓██████████▓░░░▒░▒▓▒▓█▓███ ████████▒▒▓▒▒▓▓▓▒░▓███████          
+          ▒▓█▒ ░░░░░▓▓▒▓█▓░   ░▒░▓█████▒░░ ░ ████▒█████▓▓▓▒▒▒░████▒████          
+          ▓▓██  ░░░▒▒▒▒░░  ░░ ░▒▓▒▒▓███▒█▒▓█▓▒      ░▓█▓▒░░▓░▓██░ ░              
+          ▓▓███ ▒▒░░░░▒▓▓███    ░░▓░▒▒▒░░░▓▒░▓███████▒░░░░▓█▓█░░██░░░░░          
+          ▒▓███ ░▓▒▒▓▓████▒▒░██  ░░░▓▒░██░░░░▒░░▒▓▓▓▓▒▒▒░▒▓███░▒█░░░▒░░          
+          ▒▓▓▓█  ░▒▒██▓    ░     █████▓██▒░░▒█▓▒░░░▒▓█▓▓▒▓▒█████▒ ░░░ ░          
+          ▒█████  ░ ▒████▓▒░░░░░░     ░░░░▒░ ░░▒▒▒▓▒▒▒▒▓█████████▓▒▓▒░▓          
+          ▒▓▓▓███  ░ ▒▓░ ▓███████████░  ▒▓▓▓▒▓▒▓▒░▓▓▓▓███▒░░██░░░░░░░░█          
+          ▒▓█▓▓███  ░░░      ░▓░░▒███████▒██▒▓▒▓██▓▓▓██████░░▒░▒▓▓▒░░░█          
+          ▒▓███████░ ░▒░▒░▒░  ░▓████▓▓▓████▒▒▒ ▒▒░░▒██▒░░░▒▒░░▒░░░░▓░░█          
+          ▒██████████ ▒░▒▒▒▒░░░░ ░ ░░░░   ░  ▒▒░░░▒██▒░░░░░██▒▒▓█▒▒░░██          
+          ▒▓███░   ░░ ▒▒▒░▒▒▒▒██▓▓░▒░▒░░░▓▒▒▒▒░░▓███ ░▒█▒▒░░░▒▒░░░▒░░██          
+          ░▒▓█  ░░███ ░░▒█▒▒▒▒▒░░▒▓▒▒▓▓▓▓█▓▓▓████▒░▒▒░▒░░░▒▓▒░░░█▓▓░░██          
+          ████  ░░ ██ ░░░░░▓█████▓██▓▓▓█▓█▓█████▓▓▒░ ▒█░░░░░░██████░▓██          
+          ▓██  ░░░ ▓█▒░ ░▒░░░░░▒▓▓█████████▓▒░░░ ░░░███████▓░░░░░░░░███          
+          ████  ░░  ░██▓▒▒▒▒▒▒░░▒░▒░▒░░░░░░░▒▒▒███  ██████ ▓██░░▒▒░░███          
+          ▓███                                 ▓░     ░▒██░▒ █░  ░ ░██▓          
+                                                     
+");
+                    Thread.Sleep(1200);
+                    Console.ResetColor();
+                    Console.WriteLine("🧠 Secret card unlocked: Wiggam (Ethan) added to your deck!\n");
+
+                    Console.WriteLine("📖 Wiggam Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCardWiggam.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCardWiggam.Unit.Health} 🏴");
+                    Console.WriteLine($"  Attack     : {secretCardWiggam.Unit.Attack} 💥");
+                    Console.WriteLine($"  Speed      : {secretCardWiggam.Unit.Speed} 🐢");
+                    Console.WriteLine($"  Range      : {secretCardWiggam.Unit.Range} 🎯");
+                    Console.WriteLine($"  Splash     : {(secretCardWiggam.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCardWiggam.Unit.Symbol}");
+                    Console.WriteLine("💥 Wiggam enters with full Scottish fury, breaks doors, mocks stats, and boosts national pride.");
+
+                    Console.WriteLine("\n🗣️ Quotes:");
+                    Console.WriteLine("  “SCOTLANDDDDDD!”");
+                    Console.WriteLine("  “I must be trippin.”");
+                    Console.WriteLine("  “Show me your stats.”");
+                    Console.WriteLine("  “Bro, the door was already weak.”");
+
+                    playerDeck.Add(secretCardWiggam);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Wiggam is already in your deck.");
+                }
+            }
+
+            else if (input == "pancakes")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardPancakes.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("🥞 Initiating syrup overload...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🥄 Heating griddle...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🍯 Summoning breakfast beast...");
+                    Thread.Sleep(800);
+
+                    Console.BackgroundColor = ConsoleColor.Yellow;
+                    Console.ForegroundColor = ConsoleColor.DarkBlue;
+                    Console.Clear();
+
+                    Console.WriteLine(@"
+██████╗░░█████╗░███╗░░██╗░█████╗░░█████╗░██╗░░██╗███████╗░██████╗
+██╔══██╗██╔══██╗████╗░██║██╔══██╗██╔══██╗██║░██╔╝██╔════╝██╔════╝
+██████╔╝███████║██╔██╗██║██║░░╚═╝███████║█████═╝░█████╗░░╚█████╗░
+██╔═══╝░██╔══██║██║╚████║██║░░██╗██╔══██║██╔═██╗░██╔══╝░░░╚═══██╗
+██║░░░░░██║░░██║██║░╚███║╚█████╔╝██║░░██║██║░╚██╗███████╗██████╔╝
+╚═╝░░░░░╚═╝░░╚═╝╚═╝░░╚══╝░╚════╝░╚═╝░░╚═╝╚═╝░░╚═╝╚══════╝╚═════╝░
+                 
+                ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                 
+                ░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░                 
+             ░░░░▒▓██████████████████████████████████████████████████████████▓▒░░░              
+             ░░▒▓███▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▒▓███▓░░              
+             ░░▒███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒██▓▒░              
+             ░░▒███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒░░░░▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▒▒▓▓▓▓▓▓▓▒▒▒▒▓▓▓███████▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒░░░░▒▓▓▓▒▒▒▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▒▒▒▒▒▓▒▒▒▒▓▓▓▓█████████▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░░▒▒▒▓▓▓███▓▓▓▒▒▒▒▓█▓▒░              
+             ░░▒██▓▓▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▒▒▒▒▒▒▒▓▓▓▓██▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▒▒▒▒▒▓▓▓▓▒▒░▒▓██████████▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▓▓▓███▒▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▒▒▒▒▓▓▓▓▒▒▓█████▓▓▒▒░░░░░░░▒▒▒▒▓▓███▓▓▓▓▓▓▓▓▓▓▓████▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▒▒▓██▓▓▓▓▒█████▓▒▒▒░░░░░░░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓██▓▓▓▓▒▓████▓▒▒▒▒░░░░░░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓███▓▓▓▓▓▒████▓▓▒▒▒▒▒░░▒▒▒░░▒▓▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓███▓▓▓▓▓▓▒▓████▓▓▒▒▒▒▒░░▒▒▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓████▓▓▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▓██▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓███████▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓█████▓██████▓▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓███▓▓▓▓▓▓▓██████▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▒▒▒▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓███▓▓▓▓▓▓█████▓▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▒▒▒▒▒██▓▓▓▓▓▓██████▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▒▒▓▓███▓▓▓▓▓▓▓▓▓▓██▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▓▓▓█▓▒░              
+             ░░▒██▓▓▒▓▓██▓▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒░▒▒▒▒▓▓███████████████▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▒▓▓▒▓▓▓███▓████████▓▓▓▓▓▓▓▓▒▒▒▒▒░░░░░░░░░▒████████▓▓▓██▓▓█▓▒░              
+             ░░▒██▓▓▓▒▒▒▒▒▓▓█████████████████████████████▓▓▒▒▒▒▒▒███████████▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▒▒▒▒▒░▒███████████████████████████████████▓▓████████▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▒▒▒▒▒▒▒░░▓███████████████████████████████████████████▓█▓▒░              
+             ░░▒██▓███▓▓▓▓▒▒▒▒▒▒▒░░░▓██████████████████████████████████████████▓▒░              
+             ░░▒██▓█████▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▓███████████████████████████▓▓▓███████▓█▓▒░              
+             ░░▒██▓█████████▓▓▓▓▒▒▒▒▒▒▒▒▒▒▓██████████████████████▓▒▒▒▒▒▒▒▒▓██▓█▓▒░              
+             ░░▒██▓████████████▓▓▓▓▒▒▒▒▒▒▒▒▒▒▓▓█████████████▓▒▓█▓▓▓▓▓▒▓█▓▓▒▒▓▓█▓▒░              
+             ░░▒██▓▓▓▓████████████▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▓██████████▓▓▓▓▓▓▓▓▒▓▓▒▓▓▓█▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓▓███████████▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▒▓████▓▓█▓▓▓▓▓▓▓▓▒▒▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓▓▓█████████████████▓▓▓▒▒▓▓▓▓▓▓███▓▓█▓▓▓▓▓▒█▒▓▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒██▓▓▓▓▓▓▓▓▓▓██████████████████████▓▓▓████▓██▓▓▓▓▓▒█▓▓█▓▓▓▓▓▓▓▓█▓▒░              
+             ░░▒███▒░▓▓▓▓▓▓▓▓▓▓██████████████████████████████▓▓▓▓▓▓▓▓██▓▓▓▓▓▓██▓▒░              
+             ░░▒▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓████▓░░              
+                ░▒▓██████████████████████████████████████████████████████████▓▒░░░              
+                ░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░░              
+                   ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                                                                        
+");
+
+                    Thread.Sleep(500);
+                    Console.WriteLine("🥞🥞🥞 PANCAKE PROTOCOL ACTIVATED 🥞🥞🥞\n");
+                    Thread.Sleep(2000);
+
+                    for (int i = 0; i < 1000; i++)
+                    {
+                        Console.Write("Pancakes ");
+                        if (i % 20 == 0) Console.WriteLine();
+                        Thread.Sleep(1);
+                    }
+
+                    Console.WriteLine("\n\n🎉 Secret card unlocked: Super Mini P.E.K.K.A added to your deck!\n");
+
+                    playerDeck.Add(secretCardPancakes);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Super Mini P.E.K.K.A is already in your deck.");
+                }
+            }
+
+
+            else if (input == "BEANDON")
+            {
+                if (!playerDeck.Any(c => c.Name == secretCardBerserker.Name))
+                {
+                    Console.Clear();
+                    Console.WriteLine("🩸 Summoning primal fury...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("⚔️ Sharpening mythic blades...");
+                    Thread.Sleep(500);
+                    Console.WriteLine("🔥 Rage threshold breached.");
+                    Thread.Sleep(800);
+
+                    Console.BackgroundColor = ConsoleColor.White;
+                    Console.ForegroundColor = ConsoleColor.Black;
+                    Console.Clear();
+                    Console.WriteLine(@"
+
+██████╗░███████╗██████╗░░██████╗███████╗██████╗░██╗░░██╗███████╗██████╗░
+██╔══██╗██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║░██╔╝██╔════╝██╔══██╗
+██████╦╝█████╗░░██████╔╝╚█████╗░█████╗░░██████╔╝█████═╝░█████╗░░██████╔╝
+██╔══██╗██╔══╝░░██╔══██╗░╚═══██╗██╔══╝░░██╔══██╗██╔═██╗░██╔══╝░░██╔══██╗
+██████╦╝███████╗██║░░██║██████╔╝███████╗██║░░██║██║░╚██╗███████╗██║░░██║
+╚═════╝░╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝╚═╝░░╚═╝╚═╝░░╚═╝╚══════╝╚═╝░░╚═╝
+                                                       
+           ░░░░▒░░░░░░░▒░▒░░░░░░░░░█░█░█ ▒    ░▒▓███▓  ██▒▓▓  ▒██████████████▓█▓█▒░░░░░░ ░  █░ ░░░░░                    
+           ░░░░░░░░░░░░░░░░░░░▒▒▒▒▓█▓▓█▓▒▓░░████▓▓█▓█▓▓████▓██▓██▓▒███▓░  ░▓▓██▓░░░░░░▒▓▓▓████       ░▓███████                 
+           ░░░░░░░░░░░▒▒░░░▓░░░█▒░█ ░ ▓█▒██████████████▒░░████▓▓░▒▓▒░▓█████▒░  ░░▒▒▒░ ▓█  ░  ▒▒▒█████████████░          
+           ░░░░░░░░░▒▓▒░░▓█▒░░░░░░▒░████████████▒▒▓█████▓▒██▓████████▓██▓████████▓▒▒▒██▓░░▒▒▓██▓██▓█████████▓           
+           ░░░░░░░▒██▒░░▓░░░▒█▓██▓█▓████ ▒▓███▓▓███▓▓▓▓▓███▓▒▒░░▒▓█▓██▓▒▒▒▓█▓█████▓███▒▒▓█▓▓▒▓▓▓▓▒░░  ░    ░░           
+           ▒▒░░▒▓██░ ░░░█ █░▒▓▓██████████████▓█████▓▓█▓▓██████▓█████████████▓██▓▓████▓▓█▓     ░░░░░░▒░▒█                
+           ███████ ░░░█  ▓██████████████████████▓███▓▒▒▓▓███████▓▓▓▓██████▓█▓██████▒▓▒░▒  ░▒▓▒▓▓▓█▓▓██ █▓ ░░░           
+          ░██▓░    ░░▒███████▒▒▓█████▓██████████▓▓▓██████▓████▓▓▓███████▓██▓▓░░▓██▓██▒██████▓▒▒▓▓▓█▓███ █░ ░░           
+               ░░░░░░▒██▓░ ░░▒█▓▓▓██████████████▓░▒▒▒▓▓▓▒▓█▓███████▓▓░░░▓▒▓▒▒▒▓▒▒████ ░▒▒▓▓███▒▒░░░░    ██ ░░           
+           ░░░░░░░░▒▓░▓▓▓▓███▓███████████████████▓▒▒▒▒▒▒▒▒▒▒▓▒▒▓▓▒▒▒▒▒▒░  ░     ░▒███ ████▓▓▓█▒▒░░░░░░░   ░ ░           
+           ░░░░░░░░░▓▓▓▒██████████████▓█▓██▓▓▓████▓▒▒▓▓▒▒▒▓▓▓▒▓▒▓▒▓▓████████████░░░██░ ░░░░░▒░▓░░░░░░░░▓▒▒███           
+           ░░         ▒█▓░░▓▓▓███▒▒▓▒▓█▓▓▓▓▓▒▓▒▒▒▓▒█▓▒▒▓▓▓▒▓▓▓▓██████████▓▓▓▓▒▓▓█▒░ ██░▓▓▓▓████        ░▓░█░            
+             ░█████████▒▓███▓░ ░▒▒▓▓▓▒░░░▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓██▓████▓▓█▓███▓▒░ ▒▒▒▒▒▓██▓ ▒█▒▓▓▒░░  ░▓█████████  █            
+          ▒███████▒░░    ▒███▒░░▒░░░▒▓▓████████████▓▓▓▓▒░░░░ ░▒████▓▓▓▓██▓░░ ░ ▓███▒ █░░▒▓▓████▓▓▓▒     ░░ ██           
+           ▓▓▒       ░███░▓▓▒█▒▒░  ████▓▓███████▓██▓█▓▓▒▒▓▒▒▓▒░███████▓█████████████▒ █░░      ▒░░▒▒█▒▓░░▒░ █           
+               ██████████ ▒█▓▒░░▒▓██▓▒▒▒░░  ░░▒▒▓█▓▓████░░▒▒▒█▒▒▓█▓░███▓█████████░▒██▓  ▒▒▓ ▒▒▒░ ▓▒░▒▓░█░░▒ ▒           
+           ▒░  ██████████ ░██▒▒░▒▒▓▒░▒░▒▒██▓░ ░▓█▓▓███▓█▓▒▒▒▒▓▓░▓▓▓█▓▒▒▒▒░ ░ ░▒▒▓▒░░ ▒░█████  ░▒▒▒█░░█▓██░░░            
+           ▒░░ ███▓░        ██▒░░░░▓▒░▓█ ░▒██████████▒▓▓▓░▒░▒▒░▒░▒█▓▓▒██████▓███▓█▓░ ░  ▓███ ███▓ ░░  ░░▒░▒▓▒           
+            ░░ ░     ▒▓▓▒▒▓░ █▒▓░░▓█▓██████████▓▒▒▒░▓█▒▒▓▒▒▒▒▒▒▒▒░ ▒▓▓▒░ ▒▒█▓██▓▓▒▓▓▓▒░  ███▓█  ░░░░░░░░ ░ ░░           
+           ██░░▒░░░░░░░▒▒░░░ █▒█░░▒▒██▒ ▒▒▒▒▒▒░▒▓███▓▓▒░▓▒▒▒▒░░░     ░▒▓░▒░░░▒▒▒▓██████▓  █   ░░░ ▒▓░ ▓█▓▒▓▓▓           
+            ░░░▓░▒▒░▒▒░░░░░░ █ █▓░▒▓▒▒░▒▓▒▒▒░▓▓████▒░▒▒▒▒░   ░░ ░▒▓██▓░  ░▒▓▒▒▒▒▒▒░▒▒▓▓█▓ ██▒░░░░░██▓  ░░░░░░           
+           ░░░ ░    ░░░░░░      ▓ ▒▓░░▒▒▒▒░▒▒▓██▓░ ░░░▒▒░░▒▓████████▓█████▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓ ░  ░▒▒░ ███▓▒▓▓▓▓▓           
+           ░░░ ████ ░░░░░░░██████ ░▒░░░▒▒▒▒█▓▓░░ ░░▓▒▒░░▒▓███████████████▓▒▓██▓▒▒▒░▒▓▒▓▓▓█░██▓░░░░    ░     ▒           
+           ░▒░ ████ ░░░░░░ ▓██▓▓▓█ ░░▒▒▒▓▒▒▒▒▒░▒▒▒▒▒▒▒▓████████████▓▒▓▓▓▓█▒▓▓▒▒▒▒▒▓▒▒▒▒▓▓█▒  ░▒▒▒░░▒░░▒▒██▒▒█           
+           ░░░ ████ ░▒░░░░░ ▒██▒███ ▒▓▒▓▓▓▓▓▒▓▓▒▓▒▒▓▒▒░▒█████▒█▓▓▓▒▓▓▓▒░░▒░ ░▒▒▒▒▒▒▒▓▓▓▒▓▓█   ░▒░ ░▒▒██▓▒▓█▓▒           
+           ░░░ ████ ░░░░░░░░   ████ ▒▓▓▓▓▒▒▒▒▒▒▓▓▓▒░▒▒▒▒▒    ▒░░░█▒░      ░▒▓▒▓▒▒▓▓▓▓▒▓▓▒▓█ █▒ █████████▒  ░██          
+               ████  ░░░░░░░░░  ▒█▓░░▒▓▒▓▓▓▓▓▒▒▒▒▒▓░▒▒░░▓▒▒▒░  ▒▓▒░███████▓░░░▒▓▒▓▓▓▓▓▓▓▓▓█  ▒▓█▒      ░  ░             
+           ▒███▒  █░ ░░░▒▒▒░░░░░  ███░▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░ ░█████████████████████▓▓▒▓▓█▓██▓████░ ░░░░░░░░░░░           
+           █▓ ▒░  █▒ ░░░░░░░░░░░░   ▒██▓▒█▓▒█▓▒▒▒▒▒▒▒▒▒▒░░░█████████░ ░▒▓▓▓▒██████▓▓▓▓▓▓▓▓██     ░░░░░░                 
+           █  ▓▓▒░█  ░░░░░░░░░░░▒▒░░░  █▒▒▒▒▒▒▒▒▒▒▒▓▓▒▓▓█████▓▒░░▒▒▒████▓▒▒▒▒░░▒▒▓▓▓▓▓▓▓▓██▓ ░░░           ▒█▒          
+           ▒▒▓▓██▓█  ░░░░░░░░░▒█▒░▒░░░ ██▓▒▓▓▒▒▓▓▓▒▒▒▒████▒░▒▓█▓▓████▓▓▓██▓█▓▓▓▓▓▓▓▓█▓▓███▒█  ░░░▓████████████          
+           ████████  ░░░░░░░░░░░░▒▒░░░░ █▒▓▓▓▓▓▓▒▓▓▒▒▒▓▓▒░░░▒▓▒▒▓▓▓▓▓▒▓▓▓▓▒▓▓▓▒▓▓▓█▓▓▓█▓▓▒░█░  ░  ▓███████████          
+                  █░ ░░░░░░░░░░░░░░░░░░ █░▒▒▒▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓████████▓▓▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓██████  ░░  ███████████          
+           █████░ █▓ ░░░░░░░░░░▒▒░░░░░░ ██░▒▓▓▓▓▓▓▓▓▓▓▓█▓███▓▓▓▓▒▓▒▒▒▓▒▓▓▓▓▒▒▒▓▒▓▓▓▓▓█▓██ ░███ ░▒▒ ▒██████████          
+           ▒▒▒▒░░ ██ ░▒▓██▓▓▒▒░░░░░░░░░ ░██ ░▒▓▓▓▓▓▓▓▓▓▓▒▒▒▓▒▒▒▒▒▒▒▓▒▓▓▒▒▓▓▓▓▓▓▓▓▓▓▓██▓▓▒▒          ▒█████████          
+           ▒▓▒  ░ ██ ░░░░░░░░░▒▒           ██ ░▒▓▓▓▓▓▓▓▓▒▒▒█▒█▒▒▒▒▓█▒▓▓▓█▓▓▓████▓▓██▓▒▓█▓▓▒███░ █████████████▓          
+                  ░█ ░░░░░▒░░▒▓░███████████████░▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▒▒▒▒▓▓▓▓▓▓▓▒▓▓▓██▒▒▒██▓▓▓███    █████████████          
+           █████████ ░░░░░▒░     ████▓▓█████████▓████▓▓█▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓█████▓▒░▓███▒▓███   ░░  ████████████          
+          ██████████         ░████████████████▓█  ████▒▒▒▓▓▓▓▓▓▓▓█████████▓▒▒░░█████▓████  ░░░░░░ ████████████          
+          ▒▓▓█▓▓████████████████████████████████    █████▓░░░░░░░░ ░░░░▒▒▒███████▓▓████   ░░░░░░░  ███████████          
+          ███████████████████████████████████████ ░     ██████████████████████▓▓█▓███   ░░░░░░░░░░  ██████████          
+          ███████████████████████████████████████             ▒██▓▓▓▓▒▒▒▒▒▒▒░░░░░░░                  █████████          
+                                                                                                                 
+");
+                    Thread.Sleep(1000);
+                    Console.ResetColor();
+                    Console.WriteLine("💥 Secret card unlocked: Berserker added to your deck!\n");
+
+                    Console.WriteLine("📖 Berserker Preview:");
+                    Console.WriteLine($"  Elixir Cost: {secretCardBerserker.ElixirCost}");
+                    Console.WriteLine($"  Health     : {secretCardBerserker.Unit.Health} 🩸");
+                    Console.WriteLine($"  Attack     : {secretCardBerserker.Unit.Attack} ⚔️");
+                    Console.WriteLine($"  Speed      : {secretCardBerserker.Unit.Speed} 🐺");
+                    Console.WriteLine($"  Range      : {secretCardBerserker.Unit.Range} 🩸");
+                    Console.WriteLine($"  Splash     : {(secretCardBerserker.Unit.IsSplash ? "Yes" : "No")}");
+                    Console.WriteLine($"  Symbol     : {secretCardBerserker.Unit.Symbol}");
+                    Console.WriteLine("🔥 Berserker gains +10 attack every time he takes damage.");
+
+                    Console.WriteLine("\n🗣️ Quotes:");
+                    Console.WriteLine("  “Pain is fuel.”");
+                    Console.WriteLine("  “Hrrrrr.”");
+                    Console.WriteLine("  “Jeremy.”");
+
+                    playerDeck.Add(secretCardBerserker);
+                }
+                else
+                {
+                    Console.WriteLine("❌ Beandon is already in your deck.");
+                }
+
+            }
+
+            else if (int.TryParse(input, out int index) && index >= 1 && index <= allCards.Count)
+            {
+                Card selected = allCards[index - 1];
+                if (!playerDeck.Any(c => c.Name == selected.Name))
+                {
+                    playerDeck.Add(selected);
+                    Console.WriteLine($"✅ Added {selected.Name} to your deck.");
+                }
+                else
+                {
+                    Console.WriteLine("❌ You already selected that card.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("❌ Invalid input. Try again.");
+            }
+
+
+            
+        }
+
+            Console.ResetColor();
+            Console.WriteLine("\n🧾 Final Player Deck:");
+            foreach (var card in playerDeck)
+            {
+                Console.WriteLine($"- {card.Name}");
+            }
+
+            Random random = new Random();
+            enemyDeck = allCards.OrderBy(x => random.Next()).Take(8).ToList();
+
+        
+    }
+
+    static void ResetGameState()
+    {
+        playerUnits.Clear();
+        enemyUnits.Clear();
+
+        playerTower = new Tower("Player Tower", 1000); 
+        enemyTower = new Tower("Enemy Tower", 1000);
+
+        elixir = 5;
+        aiElixir = 5;
+
+        turnCount = 0;
+        lastRegen = DateTime.Now;
+        lastAIRegen = DateTime.Now;
+
+        
+    }
+    static void StartGame()
+    {
+        Console.Clear();
+        Console.WriteLine("⚔️ The battle begins!");
+        Thread.Sleep(1000);
+
+       
+        Console.WriteLine("🧪 Simulating battle...");
+        Thread.Sleep(1000);
+
+        Console.WriteLine("\n🏁 Battle complete! Press Enter to return to the main menu.");
+        Console.ReadLine();
+    }
+
+
+    static void ScrollLoreIntro()
+    {
+        string[] intro = new string[]
+        {
+        "In every generation, a legend walks the halls...",
+        "Not with grades, but with chaos.",
+        "Not with silence, but with seismic laughter.",
+        "",
+        "This is the Hall of Legends.",
+        "Where myth meets memory.",
+        "",
+        "And today, we honour one name above all...",
+        "",
+        "Ethan Wiggam.",
+
+        @"        
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▒▒░░▒▒▒▒░░░░░░░░░░░░░▒░▒▒▒░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒░░░▒▒░░░░░░░░░░░░░░▒▒▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒░░░░░░░░░░░░░░░░░░░░░░░░▒▒▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░░░▒▒▒▒░░░░░░░▒▒░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░▒▒▒░░░░░░▒▒░░░░░░░░░░▒░░░▒▒▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▓▒▒▒▒▒▒░░░▒░░░░░░░░░░░░░░░▒░░▒▒▒░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▓▓▓▓▒▒░▒▒▒▒▒▒▒░░░░░░░░▒▒░░░▒░░░▒░░░░░░░░░░░▒▒░░▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+          ░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░▒▒▒░░░░░░░░░░░░▒░░░░░░░░░░░▒░░░░░▒▒░░▒▒▒▒▒▒▒▒▒░░░▒▒▒░▒          
+          ░░░░░░▒░░░░▒▒▒▒▒▒▒░░░▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒░▒░░░▒▒▒░░▒▒▒▒░░▒          
+          ░░▒▒▒▒▒░░░▒▒▒░░▒▒▒▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▒▒▒▒▒▒▒░▒▒▒▒▒░░░░▒▒▒▒▒▒          
+          ▒▒░░░░░░░▒▒▒▒▒░░░░          ░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒░▒░▒▒▒▒▒▒▒░░░░▒▒░▒░░░░          
+          ▒░░░░░░░▒░░░░░░░░░░▒▓▓▓▒░░        ░░░░░░░░░░░░░░░░░░░░░░▒░░░░▒▒░▒░░░░░░░▒▒▓░░░░          
+          ▒▒▒░░░▒░░░░░░░░░▓▓▒▓████████████▒ ░▒      ░░░▒░░░░░░░░░░░░░░▒▒░░░░░▒▒▒▒▒▒ ░░░░▒          
+          ▒▒▒▒▒▒▒▒▒░░░░░▓█████▓█▓▓░▒▒▓▓█▓▓▓▓▓▓▓█▒ ░░   ▒░░░░▒░░░░░░░▒▒▒▒░░░░░░░▒▒░░░░░▒▒▓          
+          ▒▒▒▒▒▒▒▒░░░▒▓███▓░▓██▓░▒██▓▓▓▓████▓█████▓▓░ ░▒ ░░▓▒ ░░░░░░░▒▒░░░░░░░░░░░░▒▓▓▓▓▓          
+          ▒░▒░░      ▒▒▓▓░█████████████▓▒░▒▓███████▓▓░░█░ ░▓█▒░░░░░░░░░░░░░░░░░▒▒░░░░░▒▒▓          
+          ░░░░  ░▒▒▓▓███▓████████▒▓██████████▓█▓█████▓▒░░░░▒█  ░░░░░░▒▒░░░░░░░▒▒▒░░░░░░░░          
+          ░░░  █▓▓█████▓▓█▓▓▓▓▓▓████▓▓▓▓▓▓▓███████████░░░░▓█  ░░░░▒▒▒░▒░░░░░▒▒▒▒▒░▒▒▒▒▒▒▒          
+          ░░░  ██████▓▒▒▒░░░▒▒████████████████████▓▓█▓▓█▓█▒▒  ░░░▒▒░▒▒▒▒▒░░▒▓▓▒▒▒▒▒▒▒▒▒░░          
+          ░░░░▒█████▒ ░░▒▒▒▒▒░░░░▒▓▓▓▓███▓▓▓▓▓▒░░▒▓▓▓███▓▓░░  ░░░░░░░ ░ ░▒▓▒▒░░▒▒░░░░░░░░          
+          ░░  ▓████░ ░▓█▓▓▓█████▓▒▒▒▓▓▓▓▓▓▓█████▓▓▓▓▒░░▒▒▓██▓▒▒░░░▒▒▒▒▒▒▒▒▒▒░░░░░░░░▒▒░▒▒          
+          ░░░  █▓█▒ ▒████████████████▓▓▓███▓▒▒▒▓███████▓▒░░█░ ░▒░░░▒▒▒░░░▒▒▒░░░▒▒▒░░░░░░           
+          ░░░ ████░▓█████████▓▒▓███████████▒▒▒░░░███▓▓▓▓▓▓▓██▒░░░░░░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+           ░░ ███░▒▓▓▓▓▒░ ░ ░░░░░  ░░▒█▒▒▓▒▒▒▒▒▒░░█████▓▓▓█░░░░░░░░░░░░░░░▒▒▒░▒▒▒▒▒▓▓▓▓▓▓          
+         █    ██░░▒░░ ░░▒▓███████████▓▓▒▒▒▒▒░░░░░    ████▓   ░░░░▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒          
+         ▓██  █░░▒▒▒▒▒▒▒▒░░░▒▒▒▒▒░░░░░░░▒▓▓▒▒▓███▓▓▓░ ▒██▓ ░░░▒▒▒▒░░░░░░░░▒░▒▒░▒░▒▒▒▒▒░▒░          
+         ▒█████░▒▒▒▓▒▒▒▒▒▒▒▒▒░░░░▒░░░░░▒▓▒░░▒▒░▒▓████░█▓▒  ░░▒▒▒▒░░░░░░░░▒░░░░▒▒▒▒░░░░░░▒          
+         █████ ▒▒▓▓▓▒▓▒▓▒░▒▒░░▒░░▒░▒▒▒▓▓▒▒▒▓███████▒░░░▒▓░ ▒▒▒▒▒▒░░▒▒▒▒▒░░▒▒▒▒▒▒░▒▒▒▒▒▒▒░          
+         ▒█▓▒▓░▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▓█▓▓▓███▓▒▓█▒███░░▓█▒░░▒░░░░░░░░░░░░▒▒▒▒▒▒░░░▒▒▒▒▒▒          
+         ██ █▒▒▓▒▒▒▓▒▒▒▒▒▒░▒░▒▒▒▒▒▒▒▒░░████▓▒░▓███▒██▓▒▒▒▓▓░░░░░░░░░░░░░░▒▒▒▒▒▒░▒▒▒▒░░░░░          
+         ░▓▒█░▒▓▓▓▒▒▒▒▓▒▒▒▒▒▓▒▒▒░▒▒▒▒▒░░░░░▒▓▓▒▒▒▓░░░░▒▓▒▒█░░░░░░▒▒▒▒▒▒▒▒▒▒▒▒░░▒░░░░░░░░▒          
+         ▓░ ░░▓▓▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░▒▒░░▒▒▒▓▓█░ ░░▒▒▒▒▒▒▒▒▒▒░░░░░░    ░░▒▒▒▒          
+         █ ▒▓▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒░░░░░ ░░░░░░░░░▒▒▒█▒░░▒▒▒▒▒░░░░   ░░    ░██    ░▒          
+         █░░░▒▓▒▒▒▓▓▓▓▓▒▒▓▒▒▒▒▒▒▒▒▒▒▒░   ░▒▓███████▓█▓ ░▒▒▓▒░▓▒▒░░░░▒░▒░██  ░█ ███████             
+         ▓██▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒▒░░░▒██████████▓█████ ▓▒▓░░░░░░▒▒▒▒ █████░ ██▓▓██▓▓███▒          
+         ███░▒▒▒▒▒▒▒▒▓▒▒▒▒▒▒▒▒▓████████████████████████████░░░░▒▒▒▒░░▒█▒█████▒ ███████████         
+         ██▓░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓████▒░           ░      ▓▓█ ░░░░░░     █▓▒ ▓██ ▓▒░███▓▒▓▓▒         
+         ▒█▓░▒▓▓▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒░░░░░░░░▒▒▓▓▓▓▒▒▒▒▒▓▓███▒▒▓▓▓  ▒ ░▒ █████░██████████▓█████▒         
+         ▒██░▒▒▒▒▒▓▒▓▓▓▒▒▒▒▓▒▒▒▒░▒▒▒▓██▓▓▓▓▓█████▓████▒░▒▓  █ ▓▓████▒░ ██▓██████▓▓▓▓▓▓███▒         
+         ▓██░▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓██▓▓▓████████▓░▒▒▒██▒░███▓▓▓██▓███▓█████████▒▓█▓▓▒         
+         ▓███░▒▒▒▒▒▒▒▓▓▒▓▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓████▓▓▓▒▒▒▒▒▒░░▓███▓▓▓▒▓▓▒▒▓▒▓▒░▓▒▓░▓▓▓▓█▓▓██▓         
+         █████░▓▓▓▓▓▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░▒▒▒▒░░█████▓█▒▓▓█████████████████████▒         
+         ▓░███░█▓▓▓▒▒▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░▒▒▒░░░░▒▒▒░▓█████████████▓▓░░░░░░░░░░ ░░░░░          
+         ░████ ░█▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░            ░░▒▒▒▓▓▒▒▒▒▒▒▒▒▒░▒▒▒          
+          █▒██░░▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒░▒█████████▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓          
+         ░▒▒▒░░▒▒▒▓▓▓▒▒▒▒▒▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█▓▓▓▓▒▓▒▒▒▓▓▓▒▒▓▓▓▒▓▒▒▒▒▒▒▒▒▒▒▒▒          
+         ░███▒▒▒▒▒▓▓█▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▓▓▒▒▒▓▒▒▒▒▒▒▒░▓▓▒▒▒▒▒▒▒▒▒▒▒▓▒▒▒▓▒▒▒▒▒▒▒▓▓▒▒▒▓▓          
+         ░▓▓▓░▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒▒▒▓▓▒░░░░▒▒▒▓▓▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒          
+         ░▓█▓░▒▒▓▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▓▓▓▓▓▒░██▓▒░░░▒▒▒▓▒▓▒▓▓▓▒▓▓▒▒▒▒▒▓▒▒▒▒▒▒▒▓          
+         ██  ▒▓▓▒▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▓▓▓▒▓▒▒▒▓███▓████████▒░░░░▒▒▓▓▒▓▒▒▓▓▓▓▒▓▓▒▓▓▓▓▓▓          
+         ░ ▒▓▒▒▓▒▒▒▓▓▒▒▓▓▓▓█▓▓▓▓▓▓▓▒▒▒▒▓▒▒▒▓▓▓▓███▒▒  ██▒███▓░████▓░░░░░░▒▓▒▒▓▒▒▒▓▓▓▓▓▓▓▓          
+          ▓█▒▒▒▒▓▓▒▒▒▓▓▓▓▓▓▓▓▓▓█▓▓▒▒▓▒▒▓▓▓▓▓██▓░░ ░█  ▓█▓▒████▓░████████▓░░░░░░▒▒▒▒▒▒▓▓▓▓          
+          █░                      ░                    █▓▒░▒████░░▒▒▒▒▒▒░▓█▓▓▒░                                                                                                                                                         
+        "
+
+
+        };
+
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        foreach (string line in intro)
+        {
+            Console.WriteLine(line);
+            Thread.Sleep(1000);
+        }
+        Console.ResetColor();
+    }
+
+
+    void ShowWiggamReplayMenu()
+    {
+        while (true)
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.DarkCyan;
+            Console.WriteLine("🎒 WIGGAM (ETHAN) — REPLAYS");
+            Console.WriteLine("----------------------------");
+            Console.WriteLine("1. Cinematic Lore Scroll");
+            Console.WriteLine("2. Animated Lore Reveal");
+            Console.WriteLine("3. Wiggam vs. The Door Cutscene");
+            Console.WriteLine("4. Back to Hall");
+            Console.ResetColor();
+
+            Console.Write("\nChoose a replay: ");
+            string input = Console.ReadLine();
+
+            switch (input)
+            {
+                case "1":
+                    ScrollLoreIntro();
+                    break;
+                case "2":
+                    RevealWiggamLoreAnimated();
+                    break;
+                case "3":
+                    WiggamVsDoorCutscene();
+                    break;
+                case "4":
+                    return;
+                default:
+                    Console.WriteLine("❌ Invalid choice. Press Enter to try again.");
+                    Console.ReadLine();
+                    break;
+            }
+        }
+    }
+
+    void ShowEvoPekkaReplayMenu()
+    {
+        Console.Clear();
+        Console.WriteLine("⚔️ Evo Pekka replays coming soon...");
+        Console.ReadLine();
+    }
+
+    void EVOMEGAKNIGHTReplayMenu()
+    {
+        Console.Clear();
+        Console.WriteLine("🌑 Shadow Warden replays coming soon...");
+        Console.ReadLine();
+    }
+
+
+     static void RevealWiggamLoreAnimated()
+    {
+        string[] loreLines = new string[]
+        {
+        "In the misty corridors of a Scottish school...",
+        "A legend was born not with grades, but with chaos.",
+        "They called him Wiggam.",
+        "But the halls knew him as something else...",
+        "🧥 The American Boy.",
+        "🗣️ The Philosopher of Vibes.",
+        "🚪 The Unlicensed Doorman.",
+        "He didn’t walk through doors — he *redefined* them.",
+        "He didn’t ask questions — he demanded: “Show me your stats.”",
+        "And on the day the classroom door fell...",
+        "He simply said: “Nahhh, I must be trippin.”",
+        "That’s when the myth became memory.",
+        "And the memory became legend.",
+        "SCOTLANDDDDDD echoed down the halls...",
+        "And the hoodie? It never came off."
+        };
+
+        Console.ForegroundColor = ConsoleColor.DarkCyan;
+        foreach (string line in loreLines)
+        {
+            foreach (char c in line)
+            {
+                Console.Write(c);
+                Thread.Sleep(35); // Adjust speed here
+            }
+            Console.WriteLine();
+            Thread.Sleep(500);
+        }
+        Console.ResetColor();
+    }
+
+
+
+
+    static void ShowHallOfLegends()
+    {
+        Console.Clear();
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine(@"
+╔════════════════════════════════════════════════════════════════╗
+║                      🏛️ HALL OF LEGENDS 🏛️                   ║
+╚════════════════════════════════════════════════════════════════╝
+
+
+
+🥞 Super Mini P.E.K.K.A
+  - Elixir Cost: 5
+  - Health     : Too Much
+  - Attack     : Way Too Much
+  - Symbol     : SMP
+  - Lore       : Forged in syrup. Tempered by chaos. The breakfast beast flattens towers with buttery fury.
+
+");
+
+        Thread.Sleep(5000);
+        Console.ResetColor();
+
+    }
+
+
+    static void WiggamVsDoorCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine("🎬 Scene: The Great Door Collapse");
+        Thread.Sleep(1000);
+
+        Console.WriteLine("\n[Wiggam approaches the classroom door]");
+        Thread.Sleep(800);
+        Console.WriteLine("Wiggam: “I’m American Boy today.”");
+        Thread.Sleep(800);
+        Console.WriteLine("[He reaches for the handle...]");
+        Thread.Sleep(800);
+        Console.WriteLine("Wiggam: “Show me your stats.”");
+        Thread.Sleep(800);
+        Console.WriteLine("[The door trembles.]");
+        Thread.Sleep(800);
+        Console.WriteLine("Wiggam: “Nahhh, I must be trippin.”");
+        Thread.Sleep(800);
+        Console.WriteLine("[CRACK — the door collapses in slow motion]");
+        Thread.Sleep(1000);
+
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine(@"
+
+██████╗░░█████╗░███╗░░██╗░██████╗░
+██╔══██╗██╔══██╗████╗░██║██╔════╝░
+██████╦╝███████║██╔██╗██║██║░░██╗░
+██╔══██╗██╔══██║██║╚████║██║░░╚██╗
+██████╦╝██║░░██║██║░╚███║╚██████╔╝
+╚═════╝░╚═╝░░╚═╝╚═╝░░╚══╝░╚═════╝░    
+");
+        Thread.Sleep(1000);
+        Console.ResetColor();
+        Console.WriteLine("📣 Students: “SCOTLANDDDDDD!”");
+        Thread.Sleep(800);
+        Console.WriteLine("📜 Legend recorded: The Great Door Collapse.");
+    }
+
+
+    void RevealWiggamLore()
+    {
+        Console.Clear();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+
+        string[] loreLines = new string[]
+        {
+        "In the misty corridors of a Scottish school...",
+        "A legend was born not with grades, but with chaos.",
+        "",
+        "They called him Wiggam.",
+        "But the halls knew him as something else...",
+        "",
+        "🧥 The American Boy.",
+        "🗣️ The Philosopher of Vibes.",
+        "🚪 The Unlicensed Doorman.",
+        "",
+        "He didn’t walk through doors — he *redefined* them.",
+        "He didn’t ask questions — he demanded: “Show me your stats.”",
+        "",
+        "And on the day the classroom door fell...",
+        "He simply said:",
+        "",
+        "  “Nahhh, I must be trippin.”",
+        "",
+        "That’s when the myth became memory.",
+        "And the memory became legend.",
+        "",
+        "SCOTLANDDDDDD echoed down the halls...",
+        "And the hoodie? It never came off.",
+        };
+
+        foreach (string line in loreLines)
+        {
+            Console.WriteLine(line);
+            Thread.Sleep(700); 
+        }
+
+        Console.ResetColor();
+    }
+
+
+
+    static void ShowAvailableCards()
+    {
+        Console.WriteLine("🃏 Your Deck:");
+        foreach (var card in playerDeck)
+        {
+            Console.WriteLine($"- {card.Name} (Cost: {card.ElixirCost})");
+        }
+    }
+
+    static void HandleDeployment(string input)
+    {
+        string cardKey = input.Trim();
+        Card match = playerDeck.Find(c => c.Name.Equals(cardKey, StringComparison.OrdinalIgnoreCase));
+
+        if (match != null)
+        {
+            if (elixir >= match.ElixirCost)
+            {
+                elixir -= match.ElixirCost;
+
+                Console.Write("Choose lane (left/right): ");
+                string lane = Console.ReadLine().ToLower();
+                if (lane != "left" && lane != "right") lane = "left";
+
+                Unit deployed = match.Unit.Clone();
+                deployed.Lane = lane;
+                deployed.Position = 0;
+                playerUnits.Add(deployed);
+                Console.WriteLine($"✅ Deployed {match.Name} to {lane} lane!");
+            }
+            else
+            {
+                Console.WriteLine("❌ Not enough elixir! Auto-skipping...");
+                Thread.Sleep(1000);
+                AdvanceEnemyUnitsOnWait();
+            }
+        }
+        else
+        {
+            Console.WriteLine("❌ Card not in your deck.");
+        }
+    }
+
+    static void RegenerateElixir()
+    {
+        TimeSpan elapsed = DateTime.Now - lastRegen;
+        if (elapsed.TotalSeconds >= regenRate && elixir < maxElixir)
+        {
+            int regenAmount = difficultyLevel;
+            elixir = Math.Min(maxElixir, elixir + regenAmount);
+            lastRegen = DateTime.Now;
+        }
+
+        
+        TimeSpan aiElapsed = DateTime.Now - lastAIRegen;
+        if (aiElapsed.TotalSeconds >= regenRate && aiElixir < maxElixir)
+        {
+            int regenAmount = difficultyLevel;
+            aiElixir = Math.Min(maxElixir, aiElixir + regenAmount);
+            lastAIRegen = DateTime.Now;
+        }
+    }
+
+    static void SimulateBattle()
+    {
+        Console.WriteLine("\n🔥 Battle begins!");
+        Thread.Sleep(500);
+
+        string pressuredLane = playerUnits.GroupBy(u => u.Lane)
+    .OrderByDescending(g => g.Count())
+    .FirstOrDefault()?.Key ?? "left";
+
+        var splashCards = enemyDeck.Where(c => c.Unit.IsSplash).ToList();
+        var singleCards = enemyDeck.Where(c => !c.Unit.IsSplash).ToList();
+        var targetDeck = playerUnits.Count(u => u.Lane == pressuredLane) >= 2 ? splashCards : singleCards;
+
+        int deployed = 0;
+        var rand = new Random();
+        bool aiPlayed = false;
+
+        foreach (var card in targetDeck.OrderBy(x => rand.Next()))
+        {
+            if (aiElixir >= card.ElixirCost)
+            {
+                aiElixir -= card.ElixirCost;
+                Unit deployedUnit = card.Unit.Clone();
+                deployedUnit.Lane = pressuredLane;
+                deployedUnit.Position = 0;
+                enemyUnits.Add(deployedUnit);
+                deployed++;
+                aiPlayed = true;
+                if (deployed >= difficultyLevel + 1) break;
+            }
+        }
+
+        if (!aiPlayed)
+        {
+            Console.WriteLine("🤖 AI has no elixir! Auto-skipping...");
+            Thread.Sleep(1000);
+            AdvancePlayerUnitsOnWait();
+        }
+
+        if (!aiPlayed)
+        {
+            Console.WriteLine("🤖 AI has no elixir! Auto-skipping...");
+            Thread.Sleep(1000);
+            AdvancePlayerUnitsOnWait();
+        }
+
+        static void AdvancePlayerUnitsOnWait()
+        {
+            foreach (var unit in playerUnits)
+            {
+                int advance = unit.Speed >= 3 ? 3 : unit.Speed == 2 ? 2 : 1;
+                unit.Position += advance;
+                Console.WriteLine($" {unit.Name} advances {advance} tiles!");
+            }
+        }
+
+
+        foreach (var unit in playerUnits)
+            unit.Position += unit.Speed;
+
+        foreach (var unit in enemyUnits)
+            unit.Position += unit.Speed;
+
+        ResolveCombat(playerUnits, enemyUnits);
+        ResolveCombat(enemyUnits, playerUnits);
+
+        playerTower.Attack(enemyUnits, "left");
+        playerTower.Attack(enemyUnits, "right");
+        enemyTower.Attack(playerUnits, "left");
+        enemyTower.Attack(playerUnits, "right");
+
+        playerUnits.RemoveAll(u => u.Health <= 0);
+        enemyUnits.RemoveAll(u => u.Health <= 0);
+    }
+
+   
+    static void AdvanceEnemyUnitsOnWait()
+    {
+        foreach (var unit in enemyUnits)
+        {
+            int advance = unit.Speed >= 3 ? 3 : unit.Speed == 2 ? 2 : 1;
+            unit.Position += advance;
+            Console.WriteLine($" {unit.Name} advances {advance} tiles!");
+        }
+    }
+
+    static void ResolveCombat(List<Unit> attackers, List<Unit> defenders)
+    {
+        foreach (var attacker in attackers)
+        {
+            var targets = defenders.Where(d => d.Lane == attacker.Lane && Math.Abs(d.Position - attacker.Position) <= attacker.Range).ToList();
+            if (targets.Count > 0)
+            {
+                if (attacker.IsSplash)
+                {
+                    foreach (var target in targets)
+                    {
+                        AnimateAttack(attacker.Name, target.Name, attacker.Attack);
+                        target.Health -= attacker.Attack;
+                    }
+                }
+                else
+                {
+                    var target = targets[0];
+                    AnimateAttack(attacker.Name, target.Name, attacker.Attack);
+                    target.Health -= attacker.Attack;
+                }
+            }
+            else
+            {
+                AnimateAttack(attacker.Name, "Tower", attacker.Attack);
+                if (attackers == playerUnits)
+                    enemyTower.Health -= attacker.Attack;
+                else
+                    playerTower.Health -= attacker.Attack;
+            }
+        }
+    }
+ 
+
+    
+    static void RunGameLoo()
+    {
+        Console.Clear();
+        Console.WriteLine("⚔️ Entering the arena...");
+        Thread.Sleep(1000);
+
+        while (playerTower.Health > 0 && enemyTower.Health > 0)
+        {
+            RegenerateElixir();
+            ShowAvailableCards();
+
+            Console.Write("\nType a card name to deploy or press Enter to skip: ");
+            string input = Console.ReadLine();
+            if (!string.IsNullOrWhiteSpace(input))
+            {
+                HandleDeployment(input);
+            }
+            else
+            {
+                Console.WriteLine("⏩ Skipping turn...");
+                AdvanceEnemyUnitsOnWait();
+            }
+
+            SimulateBattle();
+
+            Console.WriteLine($"\n🏰 Your Tower: {playerTower.Health} HP");
+            Console.WriteLine($"🤖 Enemy Tower: {enemyTower.Health} HP");
+            Console.WriteLine("\nPress Enter to continue...");
+            Console.ReadLine();
+            Console.Clear();
+        }
+
+        Console.WriteLine(playerTower.Health > 0 ? "🏆 Victory!" : "💀 Defeat!");
+        Console.WriteLine("Press Enter to return to the main menu.");
+        Console.ReadLine();
+    }
+
+    static void RevealEvoPekkaLore()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.WriteLine(@"
+███████╗██╗   ██╗ ██████╗     ██████╗ ███████╗██╗  ██╗██╗  ██╗ █████╗ 
+██╔════╝██║   ██║██╔═══██╗    ██╔══██╗██╔════╝██║ ██╔╝██║ ██╔╝██╔══██╗
+█████╗  ██║   ██║██║   ██║    ██████╔╝█████╗  █████╔╝ █████╔╝ ███████║
+██╔══╝  ██║   ██║██║   ██║    ██╔═══╝ ██╔══╝  ██╔═██╗ ██╔═██╗ ██╔══██║
+███████╗╚██████╔╝╚██████╔╝    ██║     ███████╗██║  ██╗██║  ██╗██║  ██║
+╚══════╝ ╚═════╝  ╚═════╝     ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
+                                                    
+                                 ▒▒                                                ▒▒                                                    
+                                 ▒▒░▒▒                         ░░▒                ▒▒░                                                    
+                                  ▒▒▒▒░░░                ░▒▒▒▒▒▒▒▒▒▒░░░       ▒░░░░░▒                                                    
+                                  ▒▒▒▒▒▒▒▒▒░░░░░░▒▒▒▒   ░▒▓▓▓▓▓▓▒▒▒▒▒▒▒░░░░░░░░▒▒▒▒▒▒                                                    
+                                  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▒▒▓▒▓█▒░░▒▓▒▒▓▓▓▓▒▒▒▒▒                                                      
+                                 ▒▒▒▒▒▒ ▒▒▒▒▒▒▒▒▒▒▒▒▓▓▒▒▓▓▓▓█▓▓▓▓▓██░░ ▒▒▒▓▓▓▓▒▒▒     ▓▓▒▒▒▓▓ ▒▓                                         
+                                ▒▒▒▒▒░▒▒      ▒▒▒▒▒▓▓▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▒░   ░▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▓▓                                   
+                                ▒▒▒▒▒▒░▒▒      ░░░░░  ▒░▒▓▓▓▒▒▓▓▓▓▓▓▓░░░░░▒▒▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▓▓▓▒▒▒▒▒▒▒▒▓                                  
+                                ▒▒▒▒▒▒▒▒▒▒░  ░░▒▒▒▒▒▒   ▒▓▓█▓▒▓▓▓▓▓▒█▓  ░▒▓▓▓▒░░▒▒░░▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒                                  
+                                ▒▒▒▒▒▒▒▒▒▒░░▒▒▒▓▓▓▒▒▒░▒▒▒▓███▒▓▓▓▒▒▒▓▓▓▓▓▓▓▒▒▒▓▒▒▒▓▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓                                 
+                                ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓███▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒                                    
+                                ▒▒▒▒░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒▓███████▓▓▓▓█▓▓▓▒▒▒▒▒░░▒▒▒▒▒▒▒▒▒▒▒▒▒     ░░                               
+                               ░  ░▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▓▓▓▓▓█▓▓▓▒░░▒▒▒░░░▒▒▒▒▒▒▒▒▒░▒▒▒   ░▒░ ░▒▓▒░▒▒▒▒                         
+                             ▓▓▓█▓▓▓████████▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▓▒▒▒▒▒░▒▒▒░░▒▒▒▒▒▒▒▒▒░░░▒▒▒▓  ▒▓▓▓▒░▒▓▓▓▓▒▓▓▒                        
+                            ▒▒▓▓▓▓▓███▓█████████████████████▓▓▓▓▓▓▓▓▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▓▓▒░                       
+                               ▒▓▓▓▓██████████████████████████▓▓▓▓▓▒▒▒░░░▒▒▒▒▒▒▒▒▒▒▒▓▓▓█▓▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓                         
+                                  ▓▓███████▓█████████████▓▓▓▓▓▓▓▓▒▒░░░▒▒▒▒▒▒▒▒▒▒▒░░░░▒▒▒███▓▒▒▒  ▓▓▓▒▒▓▓▓▓█▓▓▓                           
+                               ░░░▒▓▓▓▓▒▒▒▓▓▓▓▓▓████████▓▓▓▓▓▒▒▒░░▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▓█▓▓▒▓███▓▓▓▓▓▓▓▓▓▓▓█████▓▓                            
+                              ░░░▒▒░░▒▓▒▒▒▒▒▒▓▓▒▒▒▒▒▓██▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▒░░▒▓▓████▓███▓▓▓▓▓▓▓████▓▓                              
+                               ░▒▒▓▒▒▒▒▒░▒▒▒▒▒▒▒▓▓▒▒░▒▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓██▓▓▒▒▒▒▒▒▒▓█▓▓▓███▓▓██▓▓████▓▒                               
+                                ░▒▒▒▒▒░▒▒▒▓▓▒▒▒▓▓▓▓▒▒░░▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓████▓▓███▓▓▓▒░▒░▒                             
+                             ░░░░░▒▒▒▓▓▓▓▓▓▒▒▒▒▓▓███▓▒░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓███▓▓▓██▓▓▒▒▒▒▓▓▓▓▓▓███▓▓▓▓▓▓▓▒▒▒▒                               
+                              ░░▒▒▓▓▓██▒░░▒▒▓▓▓▓▓▓▓▓▓▓▒▒░▓▓███▓▓▓▓▓▓▓▓▓█████████████▓▓▓▓▓▓▓▓▓▓▓▓█████▓█                                  
+                                 ▒▒▒▒▒░▒▒▓▓▓▓▓▓▓▓▓▓█▓▓█▓▓▒▓████▓▓▓▓▓▓▓▓▓▓██▓▓▓▓▓▓███████▓▓                                               
+                                  ▓▒▒▓▓▓██▓▓▓▓█▓▓▓███▓▓█▓▓▒▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓                                                
+                                   ▓▒▒▓▓▓▓█▓▓▓███▓▓██▓▓▓██▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▒                                                
+                                     ▒▒▓▓▓███████▓▓▓███████████▓▓▓▓▓▓▓▓▓▓███▓▓▓▓▓▓▒▒▓▓▒▒░                                                
+                                      ░▓▓██████████▒▒▓▓▓▓█████████▓▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▒░▒                                                 
+                                       ▓████ ██   ▓░▒▒▓▓▓▓▓▓▓▓███████▓▓▓▓█████▓▓▓▓▓▒░▒▒▒                                                 
+                                                  ▓░▒▓▓▓▓▓████▓▓▓▓▓▓▓▓▓███████▓▓▒░░▓▒▒▒▒▒                                                
+                                                  ▓░▒▓▓▓▓▓████████▓█▓▓▓▓▓▓▒▒▒▒░░▓▓▒█▓▒▒▒▒                                                
+                                                 ▓▒▒▒▒▓▓▓▓███████████▓███████▓▓▒▓▒▓██▒▒▓█▓                                               
+                                                 ▓▒▒▒▒▓███████████████▓█████▓▓▓▓▓▓███▓▓███                                               
+                                                ░▒▒▒▓▓▓██████████████▓█▓▓███▓▓▓▓▓██████                                                  
+                                                ▓██▒▓█████████████    ███▓▓█▓▓▓▓█████▓                                                   
+                                                  ░▒▓███████████       ███▓▓▓▓▓█████▓▓▓                                                  
+                                                   ▓██████████          █████▓██████▓                                                    
+                                                   ▓████████              ██████████▓▓▒   ▓▓▓                                            
+                                              ▒▓▓░▒▓██████                     ▓████▓▓▓▓▓▒▒█▓▓                                           
+                                             ▓█▓▒▒▓▓█████                        ██████▓▓▓▓▓█                                            
+                                             ▓█████████                                ████                                              
+                                                                                                                   
+");
+        
+        Console.WriteLine("⚔️ EVO PEKKA — Forged in steel, reborn in rage.");
+        Thread.Sleep(1500);
+        Console.WriteLine("She walks with thunder. She strikes with vengeance.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void EvoPekkaCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("💥 Evo Pekka charges the arena. Sparks fly. Silence falls.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void RevealMegaKnightLore()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkBlue;
+        Console.WriteLine(@"
+
+
+███    ███ ███████  ██████   █████      ██   ██ ███    ██ ██  ██████  ██   ██ ████████ 
+████  ████ ██      ██       ██   ██     ██  ██  ████   ██ ██ ██       ██   ██    ██    
+██ ████ ██ █████   ██   ███ ███████     █████   ██ ██  ██ ██ ██   ███ ███████    ██    
+██  ██  ██ ██      ██    ██ ██   ██     ██  ██  ██  ██ ██ ██ ██    ██ ██   ██    ██    
+██      ██ ███████  ██████  ██   ██     ██   ██ ██   ████ ██  ██████  ██   ██    ██  
+                                                                                              
+                                                      ░▒░                                                                                             
+                                                    ░▒▒▒▓▒                                                                                            
+                                                  ░▒▒▓▓▓▓▓▓░                   ▒▒▒▒░                                                                  
+                                                 ▒▓▓▓▓▒▒▒▓▓▓▒                 ▒▒▓▒▒▒▒                                                                 
+                                             ░▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓░                 ▓▓▓▓▒▒░                                                                
+                                           ▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░               ░░ ▒▒░                                                                
+                                         ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒                  ▒▒                                                                
+                                        ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒                 ▒▒                                                                
+                                     ░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓▒░             ▒▓▓░▒                                                               
+                                   ▒▒▒▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▒▒░ ░     ░░░░░▒▒▒░ ░                                                             
+                                   ░▓▒▒▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓▓▓▓▓▓ ▓█▓▓▓▓▓▓▓▓▓▒▒▒▓▓▓░                                                            
+                                      ▒▓▓▓▓█████▓▓▓▓▓▓▓▓█▓▓▓▓▒▒▒▒▓█▓▓▒  ▓▓▓▓▓▓▓▓▓▓▓▒▒▒▓▓▓▒░                                                           
+                                        ▒▓▓███████████▓▓█▓▓▓▓▓▓▓▓██▓▒▓░ ▓█▓▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓░░░                                                         
+                                         ▒████████████████████████▒░▓▓▓▒████▓▓▓▓▓▒▓▓░░▒█▓▓▒▒▓▓▒                                                       
+                                          ░▓█████████████████████░ ▒▓███▓▓▓▓▓▒▒▓▒░░░░▒▓▓▒▒▓▓▓▒▒                                                       
+                                            ░▓█████████████████▒  ▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▒░                                                      
+                                              ░████████████▓▒  ░░░▓████████████▓▓▓▓▓▓█▓▓█▓▓█▓▒░                                                       
+                                             ░▓▓▓█▓▓▓▓▒▒▓▓▓▒ ░▒▒▒▒▓▓███████████▓▓▓▓▓██▓▓█▓▓▒▓▓▒░░                                                     
+                                                ▒▓██▓▓▓▓▓▓▓▓▒▓▓▓▓▓▓██▓██████████▓▓▓▓█▓▓▓▓▓▓▓▓▒▒▒░▒▒░                                                  
+                                                ▒▒▒▒░░░░░░░▒███▓▓▓▓▓██▓▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒░▒░                                                  
+                                                ▒▒▒▒░░░░░░░▒█▓█▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▓▒░░░                                                   
+                                                ▒▒▒▒▒░░░░░▒▓▓▓█▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒   ░ ░░                                                
+                                                 ▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒░░░▒▓░░░     ░░                                              
+                                                        ░▒▒░░▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒░░░░░░▒▓▒▒▒▒░░░                                                  
+                                                              ▓▓█▓▓██▓▓▓██▓▓▓▓▓▓▓▓▒▒▒░░ ░░▒▓▓▓▓▓▓▒▒▒░░░░░                                             
+                                                              ▓▓▓▓▓▓█▓▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒█▓▓▓▒▒▒▒▒▒▒▓▓▓▒░                                         
+                                                              ▓▓▓▓▓▓█▒▒▒▒▒░░░░░░▒▓▓▓▓▓▓▓▒▒▒▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒░░                                       
+                                                              ▓▓█▓▓██▒▒▒░▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▓▒▒░░░░░░░░                                   
+                                                             ░▓▓▓▓▓▓█▒▒▒░▒▒▒▒▓▓██▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒                                   
+                                                               ▒▓▓▓▓█▒▒▒▒▓▓▒▒▓▓██▓▓▓███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▒░                                   
+                                                              ░░▒▒▓▓▓▒▒▒▒▒░░░░░▒▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▓█▓▓▓▓▓▓░                                   
+                                                              ░▒▒▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓█▓▓▓▓▓                                   
+                                                             ░░▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓▓                                   
+                                                              ░▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓████████████▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓█                                   
+                                                             ░▓███▓▒▒▒▒▒▒▒▓▒▒▓▓▓▓▓▓██▓██████▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                                   
+                                                             ░▓██████▓▒▒▒▒▒▓▓▓▓▓▓▓▓█████▓▓▓▓▓▒▒▒▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░                                   
+                                                           ░▒▓▓▓██████▓░     ░░  ░   ██▓▓▓▓▓▒▒▒░▒▒▓██▓▓▓▓▓▓▓▓▓▓▓▓▓░                                   
+                                                          ▒▓███████████▒              ▓▓▓▓▓▒▒░░▒░▒▒▓██▓▓▓▓▓▓▓█▓▓▓▓░                                   
+                                                          ▒█▓▒▓▓███████▒              ▓██▒▒▒░░▒▒▓▓████████████▓▓▓▓░                                   
+                                                             ░▒▓▓▓▓▓█▓░               ░▓█▓▒▒▓▓▓██████████████▓▓▓▓▒░                                   
+                                                        ▒▓▓▓▓▓▓▒▒▓▓▒▓░                 ░▒▒▒▓█▓▓▓███▓▓░                                                
+                                                        ░▒▓▓▓▓▓▓▓▓▓░                      ░▒▓████▓▓▓▒░                                                
+");
+        
+        Console.WriteLine("🛡️ EVO MEGAKNIGHT — The weight of justice lands hard.");
+        Thread.Sleep(1500);
+        Console.WriteLine("He doesn’t jump. He descends.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void MegaKnightCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.WriteLine("💥 Evo MegaKnight slams into the battlefield. The ground trembles.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void RevealSparkyLore()
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine(@"
+
+
+░██████╗██████╗░░█████╗░██████╗░██╗░░██╗██╗░░░██╗
+██╔════╝██╔══██╗██╔══██╗██╔══██╗██║░██╔╝╚██╗░██╔╝
+╚█████╗░██████╔╝███████║██████╔╝█████═╝░░╚████╔╝░
+░╚═══██╗██╔═══╝░██╔══██║██╔══██╗██╔═██╗░░░╚██╔╝░░
+██████╔╝██║░░░░░██║░░██║██║░░██║██║░╚██╗░░░██║░░░
+╚═════╝░╚═╝░░░░░╚═╝░░╚═╝╚═╝░░╚═╝╚═╝░░╚═╝░░░╚═╝░░░                                                                 
+                                                               ░░▒                                                                
+                                                              ░░░░▒                          ▒▒▒                                  
+                                                               ▒░ ░▒▒▒▒▒▒ ▒░▒░░            ▒░ ░▒        ▒░  ░░▒▒▒▒▒▒▒▒▒▒▒         
+                                                                ░   ░░  ░▒░░░░▒ ▒▒▒▒▒░░▒░▒▒░░░▒▒░░▒   ▒░░░▒░░░▒▒░░       ░▒       
+                                                            ▓▓▓▓▒░         ░░░░░░░   ░░░    ▒▒░░ ▒▒      ▒░░░              ░▒     
+                                                        ▓▒▓▓▓██▓▓▓░ ░            ░  ░░░  ░░ ░░ ░░░░░░▒▒▒▒░░                ░░     
+                                           ▓▓   ▒▒▓▓▒▒▓▓▓▒▓▓▓███▓▒░ ░░  ░ ░ ░░   ░░░ ░▒  ░                                  ░     
+                                       ▓▓▓▓▓▓▓▒▓▒▒▒▓▒▒▓▓█▓▓▓▓███▓░░ ░    ▒░ ░▒░ ░  ░░░▒░                                  ░░▒     
+                                      ░▓███▓▓▓▓▓▓█▒█▓█▓▓██▓▓▓████▒░  ░   ▒▓░░▒░ ░░▓▓▒░▒▒ ░░           ░░▒▒░▒░░░▒░░░      ░░       
+                                       ▓██████▓▓██▓▓██▓▓██▓▓▓████▓░  ░░ ░▒▓░  ░  ░▓▓▓░▒▒▒░▒         ░░░      ▒░     ░░░░▒         
+                                       ▓██████▓▓██▓▓███▓██▓▓▓████▓▒  ░▒░░░   ░▒▒▒▒▓▓▓░░▒▒░░       ░▒▒░░░▒   ▒░   ░░░░▒            
+                                       ▒███████▓██▓▓███▓████▓▓███▓▒   ▒▒▒▒▒▒░░▒▒▒▒▒▓▒░ ▒▓▒░   ░░░   ░▒░░░     ▒                   
+                                       ▒███████▓███▓███▓████▓▓██▓▒  ░▒▒▒▒▒▓▓▓░▒▓▒▒░▒       ░░░  ░▒░░░░░░▒                         
+                                       ▒███████▓███▓███▓███▓█▓█▓▓▒▒▒▒▒▓▓▒▒▒▓▓▒░▓▓▒▒  ░░░░░░░░░░░░░░▒ ▒░░░▒                        
+                                       ░███████▓███▓███▓█████▓▓▓▓▓▓▓▒░▒▓▓▒▒░▒▒░░▓▓▒░ ░ ▒▒▒░  ░░▒                                  
+                                       ░▓████████████▓▓██▓▓█▓▓▓▓▓▒▒▒▒░░▒█▓▓▒░░░ ░░░░░ ░▒  ░░▒▒                                    
+                                       ░▓█████▓███▓▓█▓▒▒▓▓▓▓▓▓▓▒▒▒▒▒▒░  ▒▓▓▓▒▒ ░  ░░░░▒                                           
+                                        ▓████▓▓▓█▓▓▓█▓█████████▓▒░▒▒▒░░▒▒ ▒▓▒░  ░░▒▒░▒                                            
+                                        ▒▓███████████████████▓▓▒░░░░░░░░░     ░░░░░░░▒                                            
+                                          ▓▓█████████████▓▓▓▓▓▓▒▒░░▒▒▒░░░░░░░░░░░▒▒▒▒▒▓▒                                          
+                                           ▒▓▓▓█▓▓▓▓▓▓▓▓▒▒▒▒▓█▓▓▒▒▒▓█▓▓▓█▓▒░░▒▒▓▒▒▒▒▒▒▓▓                                          
+                              ▒▒▒▒▓▓     ░░▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓████▓▓▒▒▓██████▓▒▒▒▒▓▓▓▓██▓▓▓▒░░░                                      
+                              ▓▓██▓▓▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▒▒▓██████▓▒▒▒▒▓▓█████▓▓▓▒▒▒▒                                     
+                              ▓▓█▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█████▓▓▒▒▓▓▓▓▓▒▒▒▒▒▒▓█████▓▓▓▓▓▒▓                                      
+                             ░▓██▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▓▒▒▓▓▓▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓                                       
+                             ░▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████████▓▓▓▒▒▓▓▓▓▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓                                       
+                             ▒▓██▓▒██▓▓▓▓▓▓▓▓██████████████████▓▓▓▓▓▓▓▓▒▒▒░▒▒▓▓▓▓▒▒▓▓▓▓▓▓▓▓▓                                      
+                             ▒▓█▓▓▓███████████████████████████▓▓▓▓▓▓▓▓█▓▓▓█▓▓▓▓▓▓█▓▓██▓▒▓▓▓▓                                      
+                             ▒▓█████▓██████████████████▓▓█████▓▓▓▓▓▓▓▓██████▓▓▓▓▓█▓█████▓▓▓▓▒▒░░                                  
+                      ░░     ░▓███▓▓▓▓▓███████████████▓▓▒   ░▒▓▓▓▓▓▓▓▓██████▓▓▓▓▓███████▓▓▓▓▓▒▒▒                                  
+                   ▒▒▓▓▓▓▒▒░░░░▒▓▓▓▓▓█████▓██▓▓██████▓▓▓▒░░░░░░▒▓██▓▓▓███▓▓▓▓▓▓▓▓▓█████▓▓▓▓▓▓▓                                    
+                  ▓▓▓▓█████▓▓▒▒▒▒▒▓▓█████▓▓▓▓▓██████▓▓▓▓▒░░░░░░░▒███▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░                               
+                 ▒▓▓▓████████▓▒▒▒▒▒▓██████████████▓▒▓█▓▓▒▒▒▒▒▒░░▓████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░                              
+                 ▓▓▓██████████▓▒▒▒▒▓██████████████▓▓▓█▓▓▓▓▓▓▓▒▒▒▓████████████████████████████▓▓▒▒▒▒░░                             
+                 ▓▓▓█▓▓▓███████▓▓▓▓▓█████████████▓▓██▓▓███▓▓▓▓▓███████████████████████▓▓█████▓▓▓▓▓▓▒░                             
+                 ▓▓▓▓█▓▓▓██████▓▓▓▓▓██████████████▓██▓▓█████▓▓█████████████████████████████████▓▓▓▓▒░                             
+                  ▓▓▓▓██████████▓▓▓▓█████████████▓▓▓▓▓██████▓▓██████████████████▓▓▓▓▓▓▓▓█████████▓▓▒▒                             
+                   ▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓███████▓▓▓▓▒▒▒▒▒▓▓▓▒▒▒▒▒▒▒▒        ▒▓████████▓▓▒                             
+                                                ▒▒▓▓███████▓▒▒                          ▒▒▓███████▓▓                              
+                                                ░▒▒▓▓▓███▓▓▒                             ▒▓▓████▓▓▓▒                              
+                                                    ▒▒▒▒▒▒▒                                ▒▒▒▒▒▒▒                                                             
+");
+        
+        Console.WriteLine("⚡ SPARKY — The cannon that thinks.");
+        Thread.Sleep(1500);
+        Console.WriteLine("One charge. One shot. One obliteration.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void SparkyCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine("⚡ Sparky hums... then roars. The blast echoes across the arena.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+    static void RevealGolemLore()
+    {
+        Console.ForegroundColor = ConsoleColor.Gray;
+        Console.WriteLine(@"
+ ██████╗  ██████╗ ██╗     ███████╗███╗   ███╗
+██╔════╝ ██╔═══██╗██║     ██╔════╝████╗ ████║
+██║  ███╗██║   ██║██║     █████╗  ██╔████╔██║
+██║   ██║██║   ██║██║     ██╔══╝  ██║╚██╔╝██║
+╚██████╔╝╚██████╔╝███████╗███████╗██║ ╚═╝ ██║
+ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝╚═╝     ╚═╝                                                                                                                                                                   
+       
+       ░█████████████▓ ░▓▒▒▒▓▒▒▒▒▒░░░░░ ░░░░░░░░▓▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░ ▒░░░░ ██████████        
+       ░████████████▓ ░▓▓▒▒░░░▒▒▒▒▒▒▓▒░▒▒▓▒▒░░░░ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ░░░░░░ █████████        
+       ░████████████  ▓▓▒░░▒▒▒▒░░▒░░░▒▓▒▒░░░░▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ░░░░▒░ ████████        
+       ░███████████  ▒▓▓▓▓▓▓▓▒▒▒▓▓▓▒▒░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░░░░░░░▒░ ░ ░░░░░▒▓▒ ███████        
+       ▓██████████  ░░█▒▓▒░░░▒▒▒░░░░░▒▒▒▒▒▒░░░░▒▒░░░░░░░░░░░░░░░░░░░░░░░░  ░░▒▒░ ░░░▒▓░▓██████        
+                ░  ▒░░█░▓▓▒▓█▒▒░░░▒▒░░░░░░░░░░░░   ░  ░░░░░░░░░  ░░░░░░ ░░▒▒░░░▒░ ░░░▒▒░▒█████░       
+         ▒███▓▓██░░░░██▒░░▓▒░░░░▒░░░░░░▒▒▒░▒▒░░▒▒▒▒░░▒░░▒░░░░▒░░░░░▒░  ▒▒░░░░░░░░░░▒░░▒▒░█████        
+       ░█▓▒▒▒▓▒█  ░▒ ▓▓██▓▓▓███░▒▒▒▒░░░░░░░░░▒▒░  ▒░  ░░░░░░  ░░░▒▒░░░▒░░░░▒░░░▒▒▒ ░░░▓▓▓             
+       ░█▓░▒▓▓▒█  ▒▒▓▓█▓▓███▓▓▓▓█▒████████▓██▓█████████████▓███▓▒▒▒▒▓░░▒▒░░░░░   ░░▒█▒░▓██░▓▓▓        
+       ░██▒░▒▒▒█ ░░ ▒█▓▒▓▒▓▓▓▓▓▓▓████████████▓▓▒▓▓▓▓▓▓▓▓▒▓▓▒▓▓▓▓▓▒▓▒▒▒░ ░▒▒▒░▓▒░░░████░▒▒█░▒▒▒        
+       ░██▓█▒▒▓▓ ██▒█▓▒▓▓▓▓▒▒▓▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓▓▒▓▓▒▓▓▓▒▒▒▒▒▒▓▒░  ░░░▒░░░▓█████░░▒█ ░▒░        
+       ░███▓███▓ ▒████████▓▓▓▓▓▓██▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▓▓▓██░▓████████▓▓█░░▒░██░▓▒        
+       ░████▒ ▓▓ ▒██████▓███████████▓▓▓▓▓█▓██▓▓▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓█████████▓▓▓▒▓█▒▒▒▒░░░░█▓░▓░        
+       ░██   ▒██ ▓█████▓▒▒▒▓▒▓▓█████████▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▒▒▒▒▓█████▓▒      ░▒██▒▓▓▒▒░░░█░░ ░        
+       ░██ ███▓█ ░██████▓░        ▒▓▓▓▓▓▒▓█▓▓▓█▓██████████▓█████▓▒▒▒░░    ░▒▒██▓░▒▒▒░▒░░▒█░░▒▓        
+       ░██ ▓▒▒░█░░████████▒░      ░░░▓████████████████████████████▓▒░▒▒▓▓▓▓███▒░▒▓▓░▒░░ █ ▒▒▒░        
+       ░██ ▒█▒▒██ ▓▓████████▓▓▓▓▒▒▓▓████████████████████▓███████████████████▒▒▒▒▒▓░░█░░ █ █▓▒░        
+       ▓██ ░▓░▓██░▒▓█▓▓▓█████████████████▓██▓▓▓▓▓▓▓▓▓███▓▓▓▒▒▒▒▓▓▓▒▓▓▒▓▒▒░░░░░▒▓▓▓░░█░░█▒ ▒▒▒▓        
+       ▒█▒ ▒▓░▓██▓▓▓██▓▓▓▓▓▒▓███▓▓███▓▓▓▓█▓▓▓▓█▓▓▓▓▒▒▒▒▒▓▓▓███▓▓▓▓▒▓▓▓▓▒▒▒▒▒▓▓▓▒░░ ░█▓█▓▒░░  ░        
+       ▓█  ▒█░░█▓█▓▓▓███▓▓▓▓▓▓▒▓▓▓▓▓██████▓▓▓▓▓▓▓▓▓▓██▓▒▒▒▒░▒▒▒▒▒▒▓▒▓▒▒▒▒▒▒▒▒▓░░░░ ███▓▓░░▒▒░░        
+       ██  ░▓▒▒██▓██████▓▓▓▓▓██▓▓▓█▓▓▓▒▓▒▒▒▒▒▒▒▓▓▒▒▒▒▒▒▒▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒░░░▒▓▓▒    ████░░░░ ░▒░        
+       ▓█  ░░▒░ ░▓▓██████▓▓██▓▓▓▓▓▒▒▓▒░░░░▒▓▒▒▒▒░▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░▒█░▒░░ ▓████    ░▒▒░  ░        
+       ██ ▒▓█▓▓█▓▒  ▒▒█████▓▓███████▓▓████▒▒▓▓▓▓▓▓▒░▒░░▒▒▓▒▓▓▒▒░▒▒▒▒▒██████▓███░    ░▒░░░░            
+       ▒█░▓▒▒▒▒▓▓██▓▓   ░▒██████▓▓▒▒██▓███▓█▒▒▓▓▓▓▓████████████████████████     ░▒▓▓░░    ████        
+       ░█████▓▒░░▒▒▓▓▓██▓░  ░▒██████████████████████████▓▒▒▒░           ▒█░▒██░      █████████        
+       ░██▒▓█████▒▒▒▓▓██ ▒▓▓▓▓▒▒░       ▒████████                         ████████████▓███████        
+       ░███▒▓▓█████▓▓▓█▒░░░ ░░░▒▒▓▓▓▓▓▒▒▒░░░  ░ ▓▓▒▒░▒░░░▒▒▒▓▓▓██████████▒ ██▓▓███▓██████▓███▒        
+       ░████▓▓████████████████▒░░ ░░░░░      ▒▓██▓████████████████████████▒░▓▓▓█▓███▓▓██████░█        
+       ░█████▓▓▓█████▓███▓▓██████████████████▒▓████▓█████▓██▓▓▓▓▓▓▓▓████████████▓▓▓▓▓██▓█▓▓███        
+       ▒██████▓██▓██████▓▓███▓██▓█▓▓▓▓▓███████████████████▓██▓▓▓█████████▓█▓██▓▓██▓▓▓▓▓▓▓████▒        
+       ▒███████▓████▓▓███▓████▓▓█▓▓▓▓▓██▓▓████████▓▓▓▓▓▓▓▓▓███▓██▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██▓▓███░░░▒        
+       ▒█▓██████▓████████▓██▓▓▓▓▓██▓██▓▓▓█▓▓▓▓▓█▓▓██▓▓▓▓██▓▓▓▓▓▓▓▓▓▓▓▓██████▓▓▓▓▓▓█▓▓▓███░▓▒▓▓        
+       ▒█▓███████▓▓████▓███▓▓█▓█▓█▓▓▓██████▓▓███████▓▓▓▓▓▓███████████▓▓▓▓▓▓▓▓█▓▓███▓████░░▓▒▓▓        
+       ▒█▓█████████▓▓███████▓████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓███▓▓█▓▓▓▓▓▓▓███▓██▓█▓█▓▓█████░░░▒░▒▓▓        
+       ▓█▓████████████▒▓▓█▓▓███▓▓▓▓██▓████████▓██████▓▓▓▓▓▓▓█▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓█▓▓███▓░░░▒▓▓▓▓▓▓█        
+        ▓▓▓███████████████▒▒▓▓▓█████████████▓██▓▓█▓▓▓███▓▓▓▓▓▓███▓▓▓▓▓█████▓▓▓▓▓▒▒▒█████▓█████        
+       ░█▓▓██████████████████▓░░░░▒▒▓▓▓███████████▓███▓█████████▓████▓▓▓▓▓▒▓██▓▓██▓▓▓▓▓▓▓▓▓▓▓█        
+       ▓█▓▓███████▓███▓▓█████████████▓▒░░░░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░▒▒▒▓██████▓▓█▓██▓▓█▓▓▓▓▓▓▓█        
+       ▓█▓▓█▓████████▓██████████████████████████████████████████████████▓▓▓▓█▓▓▓█▓██▓▒▓██▓▓▓▓█        
+       ▓██▓████████▓█████████████████████▓▓████████████████████████▓█████████████▓▓███▒▓▓▓▓▓▓█        
+       ░▒▓▓▒▒▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒▒▒▒▒▒▒▒▒░░░░▒▒▒▒▒▒▒▒▒░▒░░░░▒▒░░░░░░░░░░░░░░░░░░░   ░░ ░                                                                                                                                                                                                                                                                                                                          
+");
+        
+        Console.WriteLine("🪨 GOLEM — The Way He Smirks...");
+        Thread.Sleep(1500);
+        Console.WriteLine("He breaks walls. He breaks wills.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+
+        static void GolemCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("💥 Nothing Built Can Last Forever.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+
+
+
+        static void RevealBerserkerLore()
+        {
+            Console.Clear();
+            Console.ForegroundColor = ConsoleColor.DarkRed;
+
+            string[] loreLines = new string[]
+            {
+        "In the frozen highlands where silence reigns...",
+        "She was born not of peace, but of fury.",
+        "",
+        "They called her Berserker.",
+        "But the battlefield knew her as something else...",
+        "",
+        "🩸 The Blade of Reckoning.",
+        "⚔️ The Storm in Human Form.",
+        "🔥 The One Who Never Fell.",
+        "",
+        "She didn’t fight for glory — she fought because rage demanded it.",
+        "She didn’t retreat — she roared louder.",
+        "",
+        "And when the last enemy stood trembling...",
+        "She whispered:",
+        "",
+        "  “Pain is fuel.”",
+        "",
+        "That’s when the myth became memory.",
+        "And the memory became legend.",
+        "",
+        "Her fury still echoes in the stones.",
+        "And her blade? It never cooled.",
+
+         @"
+
+██████╗░███████╗██████╗░░██████╗███████╗██████╗░██╗░░██╗███████╗██████╗░
+██╔══██╗██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║░██╔╝██╔════╝██╔══██╗
+██████╦╝█████╗░░██████╔╝╚█████╗░█████╗░░██████╔╝█████═╝░█████╗░░██████╔╝
+██╔══██╗██╔══╝░░██╔══██╗░╚═══██╗██╔══╝░░██╔══██╗██╔═██╗░██╔══╝░░██╔══██╗
+██████╦╝███████╗██║░░██║██████╔╝███████╗██║░░██║██║░╚██╗███████╗██║░░██║
+╚═════╝░╚══════╝╚═╝░░╚═╝╚═════╝░╚══════╝╚═╝░░╚═╝╚═╝░░╚═╝╚══════╝╚═╝░░╚═╝
+            
+                                                     ░░▓▓▓▓░████▓▓▒▒▒▒▒▒▒▒▒▒▒▒ ░▒▒▒░░░░ ▒▒          
+           ▒▒░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▒░░▒░░░░░▒░░░▒███▒░  ░░      ░████▓▒▓▓▓█▓▒█▓█▓▓▓▓▒░█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒▓▓▓░░░▒▒▒▒░▒▒▒▒▒▒░    ▒█████▒▓████▓▓▓▒▒█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█▓▒▒▓▓▓▓▓▓▓▓▓█▓▓▓▒▒░▒▒▒░░  ░▓██████▓▓▓▒▓█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█▓▒▒▓▒▒▒▒▒▒▒▒▓▒▓▓███▓▓▒▒▓▒▒▒░  ▒██▒██▓▓░█▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▓███▓▓▒▓▒▒▒▒  ░█▓█▓▒▒██▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▓▓▓▓▓▓▓▓▓▓▓██▓▓▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▒▒▒ ██▓█░███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▒█▓▓▓▓▒▒▓▓▒▒▒▒▒▓█▓▓█▒▒▒▒▒▓█▓▓▒▒▒▓▓▒▒░▒█▒▓░███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ▓▓▓▒▒▒▓▓▓▓▓▓▓▒▒▒▓▒▒▒▓▓▓▒▒▒▒▓█▓▓▓▒▒▒▒▒ █░▓▓███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒▒▓▒▓▒▒▒▒▓███▒▒▒░ █░▒▓█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █████████▓▒▒▒▒▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒██▓▒░██░▓█▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓▓▓▓█████▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░▓█▒░▓▒▓▓███▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▓▓▓▓▓▒▒▒▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▓▓█▒▒▓▒▓█▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░██▓▒▒▒▒▒▓▓▓▓▒▓▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▒▒▒░░ ░▓██░██▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▓▓▓▓▓▓▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒░░░   ░░░░▒▒█▓█▓░█▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ██▒▒▒▓▓▓▓▓▒▓▓▒▒▓▓▒▒░▒█████████▓▓▒▓▓███▒▓█▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░█▓▒▒▓▓▒▒▓▓▓▒▒▒▒▒▒▒▒▒▒░ ░░▓██▓███▒▓██▓▓░██▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ██▒▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▓▓▓▒▒░░▒▓░▓ ▓███▓▓▒▒██████▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █▓▒▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▓██▓░▒ ░▓███▓▓▓▓▒▓█▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▓▒▒▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ █▓▒▓▒▓▒▒▓▓▓▓▓▓▓▓▓▓▒▒░░░░█▓█▓████████▓▒██▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░█▒░▓▒▒▓▒▓▒░▒▒▓▓▓▓▓▓▓██▒░░▒█▓█████▓▒█▓▓█▓▓▓█▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ▓█▒▓█████▓▓▓▒░░░▒▓▓██▒▒█▓█▓▓██░   ░░░▓▓█▓▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ██▒▒▒▓▓██▒░████▓▓▒▒▒▓█░▓░░▒░   ░░░ ░▓▓███████▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ███▒▓▓▓▓▓▓▒▒▒███▓▓▓▓▒▒▒█▓  ░▒▒▒███████▓█▓██▓▓▓█▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ▒███▒▓▓▒▒░  ░░░▓▓▒░▒▓▓██░██░ ░▒▒░████▓▒▓█▓▓▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░████▒▓▓▓█████▓▓▓▓▓▓▓▒▒░▓▓███░ ░▒░ ▒█▓▓▒█████▓▓█▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ █░██▒▒▒▒▒▒  ░░▒▒▒▓▓░▒█▓▓██████   ░██▓▓▓█▓▓█▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░  █▓█▒░▓█▓▓▓▓▓▒▒▒▒▒▒░▓█▓▒█████▒██████▓▒▓██▓██▓███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░        █████░▓▓▓██▓██▓▒▓▓▒░██████▓░████ ███▓▓██▓▓▓▓▓███▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░  ▓█████████████ █▓▒░░░▒▒▓▓▓▓░██████▓██▒███ ██▓▓▓▓▓▓▓▓▓▓▓▓▓▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ █████████████████ ▓█████▓▓▓▓▓▓ ██████▒▒▒▓█▓▒▓██▓▓███████████▒          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ██████████████████ ▒▓█▓▓▓▒▓▓▓█░░██▓▓▓▓██▓ ▒▓████▓▓░░▓████▓▓▓▓░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ███████████████████    ▓▓▓▓█▒▒░ ██▓██▓▒██████▓▓▓▓▓▓██▒░░▒░░▒██░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ ███████████████████ ▓██░░░░░░░ ░██▓█▓▓███████████▓▒▒▓████░░▒░░           
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ ███████████████████░███░░█  ░  ███▓▓▓███████████████▒▓▓▓████▓░░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒▒░ █████████▓█████████ ▓██████▓ ▒████▓██████████████▓████████▓███░          
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒░ ██████████▓█████████ ██████  █████▓████▓██████████████░░░▒▓█▓▓▓           
+           ▒▒▒▒▒▒▒▒▒▒▒▒▒░▒████████████████████░░░  ░░ ███████████████████████▓██▓▓░░░████░          
+                          ███████████▓███████  ░░ ░░ ▒░████████▓████████████████▓███▓░░░░░          
+          ▒██████████████████████████▓██████  ░▓█▒  ▒▓▒ ▒░█████▓▓███████████████▓░▒██████░          
+           █████▓█████▓▓███████████████████░░░▒░████▓░░░ ▓███████████████████████▓▓▒░░░░░░          
+           ░░░▒▓▒▒▓▒▓▓▒░████████████▓██████  ░▓▒████▓▒▓░ █████▓██████▓████████▓██▓▓██████           
+          ░▓█▓▒▓▓▓▓▓▓▓▓▒████████████████████ ▒▓▒█░  ▒█▓░░███████████▓████████▓███▓▒▓▓▓▓▓▓           
+           ▓▓▓▓▓▓▓▒▒░░░██████████████████████     ▒▒░░ ░███████████▓██████████████▒▓▓▓▓▓▓           
+           ▒▒▒▓▓▒▒▒▓▒▒████████████████████░░▓▓▓░░░░░▒▓▓░███████████▓████████▓█████▓███▓▓▓           
+          ░▓▓▓▒▒▓▓▓▓░░████████████▓███████░▒▓▓▓▓▓▓▓▓▒▒▒▒██████████▓████████▓█████▒░░▒████░          
+           ▓▒▒▒▒▒▓▓▒░███▓▓██▓▓▓█▓▓███████▓░▓▓██▓▒▒▒▒▒▒▒█████████████████████████████░░░▒▓░          
+          ░▓▓█▓▓▓▒▒░████████████▓▓████████▒▒▓▓▓▓▓▓▒▒░ ███████████▓███████████████▓▒███░░░░          
+          ░▓▒▒▓▓▓▓▒▒████████████▓▓████████▓▒▓▓▒▒▓░░ ████████████▓█████▓██████████▓▒▓▓████░          
+          ░▒▓▒▒▒▒▒▒█████████████▓▓████████░░░░░░▒██▓██████████▒▓▓███████▓▓▓▓▓████▓▒▓▓▓▓██           
+           ▓▓▓▓▓▓▓▒░▒████████████▓█████████████████████████▒ ▒ ▓█████████████▓▒▓█▓▒▓▓▓▓▓▓           
+           ▓▓▓▓▓▓▒▒▒░████████████▓▓████████▓████████▓▓▓▓▓▓▓▒██████████▓██▓▓████▓█▒▓▓▓▓▓▓▓                                                       
+"
+
+
+
+
+        };
+            static void BerserkerCutscene()
+            {
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine("🔥 Berserker enters the arena. The ground cracks beneath her boots.");
+                Thread.Sleep(800);
+                Console.WriteLine("🩸 She takes damage... and smiles.");
+                Thread.Sleep(800);
+                Console.WriteLine("⚔️ Her blade glows red. Her attack surges.");
+                Thread.Sleep(800);
+                Console.WriteLine("💢 “Pain is fuel.”");
+                Thread.Sleep(1000);
+                Console.ResetColor();
+            }
+
+            foreach (string line in loreLines)
+            {
+                Console.WriteLine(line);
+                Thread.Sleep(700); // Adjust pacing as needed
+            }
+
+            Console.ResetColor();
+            Console.WriteLine("\nPress Enter to continue...");
+            Console.ReadLine();
+        }
+    }
+
+    static void GolemCutscene()
+    {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("💥 Nothing Built Can Last Forever.");
+        Thread.Sleep(1500);
+        Console.ResetColor();
+    }
+    static void AnimateAttack(string attacker, string target, int damage)
+    {
+        Console.WriteLine($"\n{attacker} prepares to strike {target}!");
+        Thread.Sleep(300);
+        Console.Write($"{attacker} ");
+        for (int i = 0; i < 3; i++)
+        {
+            Console.Write("→");
+            Thread.Sleep(100);
+        }
+        Console.WriteLine($" * {target} takes {damage} damage!");
+        Thread.Sleep(300);
+    }
+  
+    static void ShowBattleLayout()
+    {
+        const int width = 30;
+        string borderTop = "╔" + new string('═', width - 2) + "╗";
+        string borderMid = "╠" + new string('═', width - 2) + "╣";
+        string borderBottom = "╚" + new string('═', width - 2) + "╝";
+
+        Console.WriteLine("\n🏟️ Clash Arena (Vertical View):");
+        Console.WriteLine(borderTop);
+        Console.WriteLine($"║ Enemy Tower: {enemyTower.Health} HP".PadRight(width - 1) + "║");
+        Console.WriteLine(borderMid);
+
+        string enemyLeft = LaneUnitsWithPosition(enemyUnits, "left");
+        string enemyRight = LaneUnitsWithPosition(enemyUnits, "right");
+        string playerLeft = LaneUnitsWithPosition(playerUnits, "left");
+        string playerRight = LaneUnitsWithPosition(playerUnits, "right");
+
+        Console.WriteLine($"║ Enemy Left Lane : {enemyLeft}".PadRight(width - 1) + "║");
+        Console.WriteLine($"║ Enemy Right Lane: {enemyRight}".PadRight(width - 1) + "║");
+
+        Console.WriteLine("║".PadRight(width - 1) + "║");
+        string bridge = "||  BRIDGE  ||";
+        string water = "||  WATER   ||";
+        int padding = (width - 2 - bridge.Length) / 2;
+        Console.WriteLine("║" + new string(' ', padding) + bridge + new string(' ', width - 2 - bridge.Length - padding) + "║");
+        Console.WriteLine("║" + new string(' ', padding) + water + new string(' ', width - 2 - water.Length - padding) + "║");
+        Console.WriteLine("║".PadRight(width - 1) + "║");
+
+        Console.WriteLine($"║ Player Left Lane: {playerLeft}".PadRight(width - 1) + "║");
+        Console.WriteLine($"║ Player Right Lane:{playerRight}".PadRight(width - 1) + "║");
+        Console.WriteLine(borderMid);
+        Console.WriteLine($"║ Player Tower: {playerTower.Health} HP".PadRight(width - 1) + "║");
+        Console.WriteLine(borderBottom);
+    }
+    static void ShowVictoryScreen()
+    {
+        Console.Clear();
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine(@"
+
+██╗░░░██╗██╗░█████╗░████████╗░█████╗░██████╗░██╗░░░██╗
+██║░░░██║██║██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗╚██╗░██╔╝
+╚██╗░██╔╝██║██║░░╚═╝░░░██║░░░██║░░██║██████╔╝░╚████╔╝░
+░╚████╔╝░██║██║░░██╗░░░██║░░░██║░░██║██╔══██╗░░╚██╔╝░░
+░░╚██╔╝░░██║╚█████╔╝░░░██║░░░╚█████╔╝██║░░██║░░░██║░░░
+░░░╚═╝░░░╚═╝░╚════╝░░░░╚═╝░░░░╚════╝░╚═╝░░╚═╝░░░╚═╝░░░
+");
+
+        Console.ResetColor();
+        Console.WriteLine("\n🎉 Victory! You crushed the enemy with flawless strategy.");
+        Console.WriteLine("💎 Rewards: +100 Gold, +1 Legendary Chest");
+        Console.WriteLine("🔥 MVP: Evo Pekka — an unstoppable force of destruction");
+        Console.WriteLine("\nPress any key to return to the main menu...");
+        Console.ReadKey();
+    }
+    static string LaneUnits(List<Unit> units, string lane)
+    {
+        List<string> laneUnits = new List<string>();
+        foreach (var unit in units)
+        {
+            if (unit.Lane == lane)
+            {
+                string bar = GetHealthBar(unit);
+                laneUnits.Add($"{unit.Symbol}{bar}");
+            }
+        }
+        return string.Join(" ", laneUnits);
+    }
+
+    static void PrintSlow(string text, int delay = 40)
+    {
+        foreach (char c in text)
+        {
+            Console.Write(c);
+            Thread.Sleep(delay);
+        }
+    }
+    
+    static void PrintSlow(string text)
+    {
+        foreach (char c in text)
+        {
+            Console.Write(c);
+            Thread.Sleep(10); // Adjust speed here
+        }
+    }
+
+
+
+    static void ShowEvoPekkaVictoryLore()
+    {
+        Console.Clear();
+        Console.ForegroundColor = ConsoleColor.Magenta;
+
+        Console.WriteLine(@"
+╔════════════════════════════════════════════════════════════╗
+║                      ⚔️ EVO PEKKA VICTORY ⚔️                      ║
+╚════════════════════════════════════════════════════════════╝
+");
+
+        Console.ResetColor();
+
+        string[] loreLines = new string[]
+        {
+        "“When the dust settles and the towers crumble, only one name echoes across the battlefield — Evo Pekka.”\n",
+        "\nForged in the molten heart of the Arena Core, Evo Pekka is no ordinary warrior.",
+        "He is the final evolution of brute force and tactical brilliance — a fusion of ancient steel and arcane fury.\n",
+        "\nLegends say he was once a prototype Mini Pekka, discarded for being too unstable.",
+        "But deep within the vaults of forgotten decks, he awakened.\n",
+        "\nWith each clash, Evo Pekka absorbs the rage of fallen allies, his armor pulsing with violet energy.",
+        "His blade? A seismic cleaver that doesn’t just strike — it shatters.\n",
+        "\nIn the final match of the Grand Cycle, Evo Pekka stood alone against a swarm of elite units.",
+        "With a single charge, he cleaved through spells, towers, and fate itself.",
+        "The arena went silent. Then came the roar — not of the crowd, but of destiny fulfilled.\n",
+
+        "\n“𝓥𝓲𝓬𝓽𝓸𝓻𝔂 𝓲𝓼 𝓷𝓸𝓽 𝓬𝓵𝓪𝓲𝓶𝓮𝓭. 𝓘𝓽 𝓲𝓼 𝓬𝓪𝓻𝓿𝓮𝓭 — 𝓸𝓷𝓮 𝓼𝔀𝓲𝓷𝓰 𝓪𝓽 𝓪 𝓽𝓲𝓶𝓮.”\n"
+        };
+
+        foreach (string line in loreLines)
+        {
+            PrintSlow(line);
+            Thread.Sleep(400);
+        }
+
+        Console.WriteLine("\n\nPress any key to continue...");
+        Console.ReadKey();
+
+        
+        
+
+    }
+    
+    static string GetHealthBar(Unit unit)
+    {
+        int totalBars = 5;
+        int filledBars = (int)Math.Round((double)unit.Health / unit.MaxHealth * totalBars);
+        return "[" + new string('█', filledBars) + new string(' ', totalBars - filledBars) + "]";
+    }
+
+    static string LaneUnitsWithPosition(List<Unit> units, string lane)
+    {
+        List<string> laneUnits = new List<string>();
+        foreach (var unit in units)
+        {
+            if (unit.Lane == lane)
+            {
+                string bar = GetHealthBar(unit);
+                laneUnits.Add($"{unit.Symbol}@{unit.Position}{bar}");
+            }
+        }
+        return string.Join(" ", laneUnits);
+    }
+}
+
+
